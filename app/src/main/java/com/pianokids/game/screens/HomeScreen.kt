@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,12 +26,14 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pianokids.game.ui.theme.*
 import com.pianokids.game.utils.SoundManager
+import com.pianokids.game.utils.UserPreferences
 import kotlin.math.sin
 import kotlin.math.cos
 
@@ -46,14 +49,25 @@ data class GameLevel(
 )
 
 data class IslandPosition(
-    val xOffset: Float, // -1 to 1, where 0 is center
-    val ySpacing: Float // vertical spacing multiplier
+    val xOffset: Float,
+    val ySpacing: Float
 )
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onNavigateToProfile: () -> Unit = { }
+) {
+    val context = LocalContext.current
+    val userPrefs = remember { UserPreferences(context) }
+
     var showComingSoonDialog by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
+
+    // Get user data - use defaults if not logged in (guest mode)
+    val isLoggedIn = userPrefs.isLoggedIn()
+    val userName = if (isLoggedIn) userPrefs.getFullName() else "Guest Player"
+    val userLevel = if (isLoggedIn) userPrefs.getLevel() else 1
+    val totalStars = if (isLoggedIn) userPrefs.getTotalStars() else 0
 
     val levels = remember {
         listOf(
@@ -82,24 +96,30 @@ fun HomeScreen() {
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF87CEEB), // Sky blue
-                        Color(0xFFB0E0E6), // Powder blue
-                        Color(0xFF98D8E8), // Light blue
-                        Color(0xFF6CB4E0), // Medium blue
-                        Color(0xFF4A9FD8)  // Ocean blue
+                        Color(0xFF87CEEB),
+                        Color(0xFFB0E0E6),
+                        Color(0xFF98D8E8),
+                        Color(0xFF6CB4E0),
+                        Color(0xFF4A9FD8)
                     )
                 )
             )
     ) {
-        // Animated background elements
         AnimatedIslandBackground()
+        LaunchedEffect(Unit) { SoundManager.startBackgroundMusic() }
+
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Header
-            GameHeader()
+            // Header with user info and profile button
+            GameHeader(
+                userName = userName,
+                userLevel = userLevel,
+                totalStars = totalStars,
+                maxStars = levels.size * 3,
+                onProfileClick = onNavigateToProfile
+            )
 
             // Island Map with roadmap path
             Box(
@@ -116,7 +136,6 @@ fun HomeScreen() {
                     val width = size.width
                     var currentY = 180f
 
-                    // Draw connecting path between islands
                     for (i in 0 until levels.size - 1) {
                         val currentLevel = levels[i]
                         val nextLevel = levels[i + 1]
@@ -127,11 +146,8 @@ fun HomeScreen() {
                         val nextY = startY + (350 * nextLevel.position.ySpacing)
                         val endX = width / 2 + (nextLevel.position.xOffset * width * 0.3f)
 
-                        // Draw dotted path
                         val path = Path().apply {
                             moveTo(startX, startY)
-
-                            // Create a curved path
                             val midY = (startY + nextY) / 2
                             quadraticBezierTo(
                                 startX, midY,
@@ -154,7 +170,6 @@ fun HomeScreen() {
                     }
                 }
 
-                // Islands and level cards
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -169,7 +184,8 @@ fun HomeScreen() {
 
                         FloatingIslandLevel(
                             level = level,
-                            onClick = { showComingSoonDialog = true 
+                            onClick = {
+                                showComingSoonDialog = true
                                 SoundManager.playClick()
                             }
                         )
@@ -180,7 +196,6 @@ fun HomeScreen() {
             }
         }
 
-        // Coming Soon Dialog
         if (showComingSoonDialog) {
             ComingSoonDialog(onDismiss = { showComingSoonDialog = false })
         }
@@ -188,7 +203,13 @@ fun HomeScreen() {
 }
 
 @Composable
-fun GameHeader() {
+fun GameHeader(
+    userName: String,
+    userLevel: Int,
+    totalStars: Int,
+    maxStars: Int,
+    onProfileClick: () -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -202,14 +223,15 @@ fun GameHeader() {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
+                .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Player info
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
             ) {
                 Box(
                     modifier = Modifier
@@ -219,7 +241,8 @@ fun GameHeader() {
                             Brush.linearGradient(
                                 colors = listOf(RainbowOrange, RainbowPink)
                             )
-                        ),
+                        )
+                        .clickable(onClick = onProfileClick),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -228,16 +251,17 @@ fun GameHeader() {
                     )
                 }
 
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Player",
+                        text = userName,
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        )
+                            fontSize = 20.sp
+                        ),
+                        maxLines = 1
                     )
                     Text(
-                        text = "Level 1 - Beginner",
+                        text = "Level $userLevel - ${getLevelTitle(userLevel)}",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = TextLight,
                             fontSize = 14.sp
@@ -246,27 +270,56 @@ fun GameHeader() {
                 }
             }
 
+            // Profile button
+            IconButton(
+                onClick = onProfileClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(RainbowBlue)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = "Profile",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
             // Stars collected
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Star,
                     contentDescription = "Stars",
                     tint = RainbowYellow,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(28.dp)
                 )
                 Text(
-                    text = "0/24",
+                    text = "$totalStars/$maxStars",
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 24.sp,
+                        fontSize = 20.sp,
                         color = RainbowOrange
                     )
                 )
             }
         }
+    }
+}
+
+fun getLevelTitle(level: Int): String {
+    return when (level) {
+        1 -> "Beginner"
+        in 2..3 -> "Learner"
+        in 4..5 -> "Player"
+        in 6..7 -> "Skilled"
+        in 8..10 -> "Expert"
+        else -> "Master"
     }
 }
 

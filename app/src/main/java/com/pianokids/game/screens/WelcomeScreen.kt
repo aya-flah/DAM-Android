@@ -4,7 +4,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -24,6 +23,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pianokids.game.R
 import com.pianokids.game.ui.theme.*
+import com.pianokids.game.utils.components.AnimatedOceanWithIslands
+import com.pianokids.game.utils.components.RainbowButton
+import com.pianokids.game.utils.components.SettingsDialog
 import com.pianokids.game.utils.SoundManager
 import kotlinx.coroutines.delay
 

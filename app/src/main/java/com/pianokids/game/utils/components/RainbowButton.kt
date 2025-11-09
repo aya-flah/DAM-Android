@@ -1,5 +1,4 @@
-// app/src/main/java/com/pianokids/game/screens/RainbowButton.kt
-package com.pianokids.game.screens
+package com.pianokids.game.utils.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*

@@ -1,4 +1,4 @@
-package com.pianokids.game.screens
+package com.pianokids.game.utils.components
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
