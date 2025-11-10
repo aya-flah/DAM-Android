@@ -1,7 +1,12 @@
+// HomeScreen.kt
 package com.pianokids.game.screens
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,22 +25,30 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.pianokids.game.R
+import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.ui.theme.*
+import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.UserPreferences
+import com.pianokids.game.viewmodel.AuthViewModel
+import kotlinx.coroutines.launch
 import kotlin.math.sin
-import kotlin.math.cos
 
 data class GameLevel(
     val number: Int,
@@ -55,40 +68,70 @@ data class IslandPosition(
 
 @Composable
 fun HomeScreen(
-    onNavigateToProfile: () -> Unit = { }
+    onNavigateToProfile: () -> Unit = {},
+    onNavigateToAuth: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val activity = context as? Activity
     val userPrefs = remember { UserPreferences(context) }
+    val authRepository = remember { AuthRepository(context) }
+    val socialLoginManager = remember { SocialLoginManager(context) }
+    val scope = rememberCoroutineScope()
 
     var showComingSoonDialog by remember { mutableStateOf(false) }
+    var showGuestLimitDialog by remember { mutableStateOf(false) }
+    var showLoginDialog by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
     val scrollState = rememberScrollState()
 
-    // Get user data - use defaults if not logged in (guest mode)
-    val isLoggedIn = userPrefs.isLoggedIn()
-    val userName = if (isLoggedIn) userPrefs.getFullName() else "Guest Player"
-    val userLevel = if (isLoggedIn) userPrefs.getLevel() else 1
-    val totalStars = if (isLoggedIn) userPrefs.getTotalStars() else 0
+    val authViewModel: AuthViewModel = viewModel()
+    val isLoggedIn by authViewModel.isLoggedIn.collectAsState()   // <-- REACTIVE!
+    val user = userPrefs.getUser()
 
-    val levels = remember {
+    val userName = when {
+        user != null -> user.name
+        isLoggedIn -> userPrefs.getFullName()
+        else -> "Guest Player"
+    }
+
+    val userPhotoUrl = user?.photoUrl
+
+    val userLevel = when {
+        user != null -> user.level
+        isLoggedIn -> userPrefs.getLevel()
+        else -> 1
+    }
+
+    val totalStars = when {
+        user != null -> user.score / 100
+        isLoggedIn -> userPrefs.getTotalStars()
+        else -> 0
+    }
+
+    val levels = remember(isLoggedIn) {
         listOf(
-            GameLevel(1, "Basic Keys", "Pirate Ship", true, 0, "🚢", OceanDeep,
-                IslandPosition(0f, 1f)),
-            GameLevel(2, "Simple Melody", "Japanese Garden", false, 0, "🏯", RainbowPink,
-                IslandPosition(-0.6f, 1.2f)),
-            GameLevel(3, "Follow Rhythm", "Anime City", false, 0, "🌸", RainbowViolet,
-                IslandPosition(0.5f, 1.3f)),
-            GameLevel(4, "Both Hands", "Ninja Village", false, 0, "🥷", RainbowIndigo,
-                IslandPosition(-0.4f, 1.2f)),
-            GameLevel(5, "Speed Challenge", "Dragon Temple", false, 0, "🐉", RainbowRed,
-                IslandPosition(0.6f, 1.3f)),
-            GameLevel(6, "Cartoon World", "Superhero City", false, 0, "🦸", RainbowOrange,
-                IslandPosition(-0.5f, 1.2f)),
-            GameLevel(7, "Hero Training", "Marvel Universe", false, 0, "⚡", RainbowYellow,
-                IslandPosition(0.4f, 1.3f)),
-            GameLevel(8, "Final Concert", "New York", false, 0, "🗽", RainbowGreen,
-                IslandPosition(0f, 1.2f))
+            GameLevel(1, "Basic Keys", "Pirate Ship", true, 0, "🚢", OceanDeep, IslandPosition(0f, 1f)),
+            GameLevel(2, "Simple Melody", "Japanese Garden", isLoggedIn, 0, "🏯", RainbowPink, IslandPosition(-0.6f, 1.2f)),
+            GameLevel(3, "Follow Rhythm", "Anime City", isLoggedIn, 0, "🌸", RainbowViolet, IslandPosition(0.5f, 1.3f)),
+            GameLevel(4, "Both Hands", "Ninja Village", isLoggedIn, 0, "🥷", RainbowIndigo, IslandPosition(-0.4f, 1.2f)),
+            GameLevel(5, "Speed Challenge", "Dragon Temple", isLoggedIn, 0, "🐉", RainbowRed, IslandPosition(0.6f, 1.3f)),
+            GameLevel(6, "Cartoon World", "Superhero City", isLoggedIn, 0, "🦸", RainbowOrange, IslandPosition(-0.5f, 1.2f)),
+            GameLevel(7, "Hero Training", "Marvel Universe", isLoggedIn, 0, "⚡", RainbowYellow, IslandPosition(0.4f, 1.3f)),
+            GameLevel(8, "Final Concert", "New York", isLoggedIn, 0, "🗽", RainbowGreen, IslandPosition(0f, 1.2f))
         )
     }
+
+    // Google Sign-In Launcher
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            socialLoginManager.handleGoogleSignInResult(task)
+        }
+    }
+
+    LaunchedEffect(Unit) { SoundManager.startBackgroundMusic() }
 
     Box(
         modifier = Modifier
@@ -106,28 +149,36 @@ fun HomeScreen(
             )
     ) {
         AnimatedIslandBackground()
-        LaunchedEffect(Unit) { SoundManager.startBackgroundMusic() }
 
+        // Loading Overlay
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = RainbowYellow)
+            }
+        }
 
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Header with user info and profile button
+        Column(modifier = Modifier.fillMaxSize()) {
             GameHeader(
                 userName = userName,
+                userPhotoUrl = userPhotoUrl,
                 userLevel = userLevel,
                 totalStars = totalStars,
                 maxStars = levels.size * 3,
+                isLoggedIn = isLoggedIn,
                 onProfileClick = onNavigateToProfile
             )
 
-            // Island Map with roadmap path
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
             ) {
-                // The roadmap path connecting islands
+                // Roadmap path
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -137,27 +188,22 @@ fun HomeScreen(
                     var currentY = 180f
 
                     for (i in 0 until levels.size - 1) {
-                        val currentLevel = levels[i]
-                        val nextLevel = levels[i + 1]
-
-                        val startX = width / 2 + (currentLevel.position.xOffset * width * 0.3f)
+                        val current = levels[i]
+                        val next = levels[i + 1]
+                        val startX = width / 2 + (current.position.xOffset * width * 0.3f)
                         val startY = currentY
-
-                        val nextY = startY + (350 * nextLevel.position.ySpacing)
-                        val endX = width / 2 + (nextLevel.position.xOffset * width * 0.3f)
+                        val nextY = startY + (350 * next.position.ySpacing)
+                        val endX = width / 2 + (next.position.xOffset * width * 0.3f)
 
                         val path = Path().apply {
                             moveTo(startX, startY)
                             val midY = (startY + nextY) / 2
-                            quadraticBezierTo(
-                                startX, midY,
-                                endX, nextY
-                            )
+                            quadraticBezierTo(startX, midY, endX, nextY)
                         }
 
                         drawPath(
                             path = path,
-                            color = if (currentLevel.isUnlocked)
+                            color = if (current.isUnlocked)
                                 Color(0xFFFFD700).copy(alpha = 0.6f)
                             else Color.Gray.copy(alpha = 0.3f),
                             style = Stroke(
@@ -165,7 +211,6 @@ fun HomeScreen(
                                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 15f))
                             )
                         )
-
                         currentY = nextY
                     }
                 }
@@ -174,30 +219,100 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     levels.forEachIndexed { index, level ->
                         val spacing = (350 * level.position.ySpacing).dp
-
                         Spacer(modifier = Modifier.height(if (index == 0) 0.dp else spacing - 350.dp))
 
                         FloatingIslandLevel(
                             level = level,
                             onClick = {
-                                showComingSoonDialog = true
+                                if (level.isUnlocked) {
+                                    showComingSoonDialog = true
+                                } else {
+                                    showGuestLimitDialog = true
+                                }
                                 SoundManager.playClick()
                             }
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(100.dp))
+                    Spacer(Modifier.height(100.dp))
                 }
             }
         }
 
+        // Dialogs
         if (showComingSoonDialog) {
-            ComingSoonDialog(onDismiss = { showComingSoonDialog = false })
+            ComingSoonDialog { showComingSoonDialog = false }
+        }
+
+        if (showGuestLimitDialog) {
+            GuestLimitDialog(
+                onDismiss = { showGuestLimitDialog = false },
+                onLoginClick = {
+                    showGuestLimitDialog = false
+                    showLoginDialog = true
+                }
+            )
+        }
+
+        if (showLoginDialog) {
+            LoginChooserDialog(
+                onDismiss = { showLoginDialog = false },
+                onGoogleClick = {
+                    isLoading = true
+                    socialLoginManager.signInWithGoogle(
+                        launcher = googleSignInLauncher,
+                        onSuccess = { idToken ->
+                            scope.launch {
+                                val result = authRepository.loginWithSocial(
+                                    token = idToken,
+                                    provider = "google"
+                                )
+                                isLoading = false
+                                result.onSuccess {
+                                    showLoginDialog = false
+                                    // Refresh screen
+                                }
+                                result.onFailure {
+                                    // Show error
+                                }
+                            }
+                        },
+                        onFailure = {
+                            isLoading = false
+                        }
+                    )
+                },
+                onFacebookClick = {
+                    activity?.let { act ->
+                        isLoading = true
+                        socialLoginManager.loginWithFacebook(
+                            activity = act,
+                            onSuccess = { accessToken ->
+                                scope.launch {
+                                    val result = authRepository.loginWithSocial(
+                                        token = accessToken,
+                                        provider = "facebook"
+                                    )
+                                    isLoading = false
+                                    result.onSuccess {
+                                        showLoginDialog = false
+                                        // Refresh screen
+                                    }
+                                    result.onFailure {
+                                        // Show error
+                                    }
+                                }
+                            },
+                            onFailure = {
+                                isLoading = false
+                            }
+                        )
+                    }
+                }
+            )
         }
     }
 }
@@ -205,9 +320,11 @@ fun HomeScreen(
 @Composable
 fun GameHeader(
     userName: String,
+    userPhotoUrl: String?,
     userLevel: Int,
     totalStars: Int,
     maxStars: Int,
+    isLoggedIn: Boolean,
     onProfileClick: () -> Unit
 ) {
     Card(
@@ -233,6 +350,7 @@ fun GameHeader(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
+                // Avatar
                 Box(
                     modifier = Modifier
                         .size(60.dp)
@@ -245,21 +363,56 @@ fun GameHeader(
                         .clickable(onClick = onProfileClick),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "🎹",
-                        fontSize = 32.sp
-                    )
+                    if (userPhotoUrl != null) {
+                        AsyncImage(
+                            model = userPhotoUrl,
+                            contentDescription = "Profile Photo",
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(
+                            text = if (isLoggedIn) "🎹" else "👤",
+                            fontSize = 32.sp
+                        )
+                    }
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = userName,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        ),
-                        maxLines = 1
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = userName,
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            ),
+                            maxLines = 1
+                        )
+
+                        // Guest badge
+                        if (!isLoggedIn) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = RainbowOrange.copy(alpha = 0.2f)
+                            ) {
+                                Text(
+                                    text = "GUEST",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 10.sp,
+                                        color = RainbowOrange
+                                    ),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
                     Text(
                         text = "Level $userLevel - ${getLevelTitle(userLevel)}",
                         style = MaterialTheme.typography.bodyMedium.copy(
@@ -288,7 +441,7 @@ fun GameHeader(
 
             Spacer(modifier = Modifier.width(8.dp))
 
-            // Stars collected
+            // Stars
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -312,16 +465,7 @@ fun GameHeader(
     }
 }
 
-fun getLevelTitle(level: Int): String {
-    return when (level) {
-        1 -> "Beginner"
-        in 2..3 -> "Learner"
-        in 4..5 -> "Player"
-        in 6..7 -> "Skilled"
-        in 8..10 -> "Expert"
-        else -> "Master"
-    }
-}
+
 
 @Composable
 fun FloatingIslandLevel(
@@ -356,25 +500,15 @@ fun FloatingIslandLevel(
             .height(350.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Calculate position based on level configuration
         Box(
             modifier = Modifier
                 .offset(x = (level.position.xOffset * 120).dp, y = floatOffset.dp)
                 .rotate(if (level.isUnlocked) rotation else 0f)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Floating island with level card
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(contentAlignment = Alignment.Center) {
                     // Island base
-                    Canvas(
-                        modifier = Modifier
-                            .size(280.dp, 200.dp)
-                    ) {
-                        // Draw island ground
+                    Canvas(modifier = Modifier.size(280.dp, 200.dp)) {
                         val groundPath = Path().apply {
                             moveTo(size.width * 0.5f, size.height * 0.3f)
                             lineTo(size.width * 0.9f, size.height * 0.5f)
@@ -387,7 +521,6 @@ fun FloatingIslandLevel(
                             close()
                         }
 
-                        // Ground gradient
                         drawPath(
                             path = groundPath,
                             brush = Brush.verticalGradient(
@@ -399,7 +532,6 @@ fun FloatingIslandLevel(
                             )
                         )
 
-                        // Island cliff/rock
                         val cliffPath = Path().apply {
                             moveTo(size.width * 0.15f, size.height * 0.7f)
                             lineTo(size.width * 0.85f, size.height * 0.7f)
@@ -424,7 +556,6 @@ fun FloatingIslandLevel(
                             )
                         )
 
-                        // Add texture to cliff
                         for (i in 0..5) {
                             drawOval(
                                 color = Color(0xFF4A3728).copy(alpha = 0.3f),
@@ -437,12 +568,12 @@ fun FloatingIslandLevel(
                         }
                     }
 
-                    // Level card on the island
+                    // Level card
                     Card(
                         modifier = Modifier
                             .width(220.dp)
                             .offset(y = (-40).dp)
-                            .clickable(enabled = level.isUnlocked, onClick = onClick),
+                            .clickable(enabled = true, onClick = onClick),
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = if (level.isUnlocked)
@@ -453,10 +584,7 @@ fun FloatingIslandLevel(
                             defaultElevation = if (level.isUnlocked) 12.dp else 4.dp
                         )
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            // Colored header
+                        Box(modifier = Modifier.fillMaxWidth()) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -477,7 +605,6 @@ fun FloatingIslandLevel(
                                     .padding(16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                // Level icon
                                 Box(
                                     modifier = Modifier
                                         .size(70.dp)
@@ -487,10 +614,7 @@ fun FloatingIslandLevel(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     if (level.isUnlocked) {
-                                        Text(
-                                            text = level.emoji,
-                                            fontSize = 36.sp
-                                        )
+                                        Text(text = level.emoji, fontSize = 36.sp)
                                     } else {
                                         Icon(
                                             imageVector = Icons.Default.Lock,
@@ -532,11 +656,8 @@ fun FloatingIslandLevel(
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                // Stars
                                 if (level.isUnlocked) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                         repeat(3) { index ->
                                             Icon(
                                                 imageVector = Icons.Default.Star,
@@ -596,10 +717,8 @@ fun AnimatedIslandBackground() {
         val width = size.width
         val height = size.height
 
-        // Draw clouds
         fun drawCloud(x: Float, y: Float, scale: Float) {
             translate(x, y) {
-                // Cloud circles
                 drawCircle(
                     color = Color.White.copy(alpha = 0.7f),
                     radius = 30f * scale,
@@ -627,7 +746,6 @@ fun AnimatedIslandBackground() {
         drawCloud(cloud2X, height * 0.25f, 0.8f)
         drawCloud(cloud1X + 300f, height * 0.35f, 1.2f)
 
-        // Draw rolling hills/water at bottom
         val hillPath = Path().apply {
             moveTo(0f, height * 0.85f)
 
@@ -659,7 +777,6 @@ fun AnimatedIslandBackground() {
             )
         )
 
-        // Draw water waves
         for (i in 0 until 3) {
             val wavePath = Path()
             val amplitude = 15f
@@ -686,12 +803,7 @@ fun AnimatedIslandBackground() {
 fun ComingSoonDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Text(
-                text = "🎵",
-                fontSize = 64.sp
-            )
-        },
+        icon = { Text(text = "🎵", fontSize = 64.sp) },
         title = {
             Text(
                 text = "Coming Soon!",
@@ -710,9 +822,7 @@ fun ComingSoonDialog(onDismiss: () -> Unit) {
             ) {
                 Text(
                     text = "This level is under construction!",
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 20.sp
-                    ),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp),
                     textAlign = TextAlign.Center
                 )
                 Text(
@@ -731,9 +841,7 @@ fun ComingSoonDialog(onDismiss: () -> Unit) {
                     SoundManager.playClick()
                     onDismiss()
                 },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = RainbowBlue
-                ),
+                colors = ButtonDefaults.buttonColors(containerColor = RainbowBlue),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
@@ -748,3 +856,73 @@ fun ComingSoonDialog(onDismiss: () -> Unit) {
         shape = RoundedCornerShape(28.dp)
     )
 }
+
+@Composable
+fun GuestLimitDialog(
+    onDismiss: () -> Unit,
+    onLoginClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Text(text = "🔒", fontSize = 64.sp) },
+        title = {
+            Text(
+                text = "Login Required",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 32.sp,
+                    color = RainbowOrange
+                ),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "This level is locked for guests!",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp),
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Create an account or login to unlock all levels and save your progress! 🎹✨",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 16.sp,
+                        color = TextLight
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    SoundManager.playClick()
+                    onLoginClick()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = RainbowBlue),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Login Now",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = {
+                SoundManager.playClick()
+                onDismiss()
+            }) {
+                Text("Maybe Later", color = TextLight)
+            }
+        },
+        containerColor = Color.White,
+        shape = RoundedCornerShape(28.dp)
+    )
+}
+
