@@ -1,40 +1,25 @@
+
 package com.pianokids.game.view.screens
 
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -42,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -64,20 +50,31 @@ data class GameLevel(
     val emoji: String,
     val color: Color,
     val position: IslandPosition,
-    val islandImageRes: Int? = null
+    val landImageRes: Int
 )
 
 data class IslandPosition(
-    val xOffset: Float,
-    val yOffset: Float
+    val x: Float, // 0..1 across map
+    val y: Float  // 0..1 down map
 )
 
-data class DecorativeIsland(
-    val imageRes: Int,
-    val position: IslandPosition,
-    val size: Float = 1f,
-    val offsetY: Float = 0f
+data class Cloud(
+    val id: Int,
+    var x: Float,
+    val y: Float,
+    val size: Float,
+    val speed: Float,
+    val alpha: Float
 )
+
+data class Bird(
+    val id: Int,
+    var x: Float,
+    var y: Float,
+    val speed: Float,
+    val size: Float
+)
+
 @Composable
 fun HomeScreen(
     onNavigateToProfile: () -> Unit = {},
@@ -97,150 +94,102 @@ fun HomeScreen(
     var isLoading by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
+    val verticalScrollState = rememberScrollState()
     val authViewModel: AuthViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
-
-    // ✅ UTILISE LE STATEFLOW POUR LE NOM
     val userName by authViewModel.userName.collectAsState()
-
     val user = userPrefs.getUser()
 
-    // ✅ SUPPRIME LA LOGIQUE LOCALE DU NOM (maintenant géré par ViewModel)
-    // val userName = when { ... }
-
     val userPhotoUrl = user?.photoUrl
-    val userLevel = when {
-        user != null -> user.level
-        isLoggedIn -> userPrefs.getLevel()
-        else -> 1
-    }
     val totalStars = when {
         user != null -> user.score / 100
         isLoggedIn -> userPrefs.getTotalStars()
         else -> 0
     }
 
+    var waveOffset by remember { mutableStateOf(0f) }
+    var cloudOffset by remember { mutableStateOf(0f) }
+    var birdOffset by remember { mutableStateOf(0f) }
+    var islandFloat by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            waveOffset += 0.5f
+            cloudOffset += 0.3f
+            birdOffset += 0.8f
+            islandFloat += 0.05f
+            kotlinx.coroutines.delay(50)
+        }
+    }
+
     val levels = remember(isLoggedIn) {
         listOf(
             GameLevel(
                 number = 1,
-                title = "Electric Meadow",
-                world = "Pokémon Plains",
+                title = "Gotham Nights",
+                world = "Dark Knight City",
                 isUnlocked = true,
-                stars = 0,
-                emoji = "⚡",
-                color = RainbowYellow,
-                position = IslandPosition(0.12f, 0.1f),
-                islandImageRes = R.drawable.island1
+                stars = 3,
+                emoji = "🦇",
+                color = Color(0xFF1A1A1A),
+                position = IslandPosition(0.15f, 0.30f),
+                landImageRes = R.drawable.level_1
             ),
             GameLevel(
                 number = 2,
-                title = "Springfield Suburbs",
-                world = "Donut Paradise",
+                title = "Web of Justice",
+                world = "Hero's Landing",
                 isUnlocked = isLoggedIn,
-                stars = 0,
-                emoji = "🍩",
-                color = RainbowOrange,
-                position = IslandPosition(0.26f, -0.15f),
-                islandImageRes = R.drawable.island4
+                stars = 2,
+                emoji = "🕷️",
+                color = RainbowRed,
+                position = IslandPosition(0.32f, 0.48f),
+                landImageRes = R.drawable.level_2
             ),
             GameLevel(
                 number = 3,
-                title = "Power Training",
-                world = "Saiyan Island",
-                isUnlocked = isLoggedIn,
-                stars = 0,
-                emoji = "🥋",
-                color = RainbowRed,
-                position = IslandPosition(0.40f, 0.08f),
-                islandImageRes = R.drawable.island3
-            ),
-            GameLevel(
-                number = 4,
                 title = "Moonlight Magic",
                 world = "Crystal Kingdom",
                 isUnlocked = isLoggedIn,
-                stars = 0,
+                stars = 1,
                 emoji = "🌙",
                 color = RainbowPink,
-                position = IslandPosition(0.53f, -0.12f),
-                islandImageRes = R.drawable.island5
+                position = IslandPosition(0.48f, 0.28f),
+                landImageRes = R.drawable.level_3
+            ),
+            GameLevel(
+                number = 6,
+                title = "Electric Meadow",
+                world = "Pokémon Plains",
+                isUnlocked = isLoggedIn,
+                stars = 0,
+                emoji = "⚡",
+                color = RainbowYellow,
+                position = IslandPosition(0.18f, 0.65f),
+                landImageRes = R.drawable.level_4
             ),
             GameLevel(
                 number = 5,
                 title = "Shield of Justice",
-                world = "Hero's Landing",
+                world = "Avengers Base",
                 isUnlocked = isLoggedIn,
                 stars = 0,
                 emoji = "🛡️",
                 color = RainbowBlue,
-                position = IslandPosition(0.66f, 0.15f),
-                islandImageRes = R.drawable.island8
+                position = IslandPosition(0.55f, 0.63f),
+                landImageRes = R.drawable.level_5
             ),
             GameLevel(
-                number = 6,
+                number = 4,
                 title = "Hidden Village",
-                world = "Ninja's Path",
+                world = "Ninja Path",
                 isUnlocked = isLoggedIn,
                 stars = 0,
                 emoji = "🥷",
                 color = RainbowIndigo,
-                position = IslandPosition(0.78f, -0.08f),
-                islandImageRes = R.drawable.island7
-            ),
-            GameLevel(
-                number = 7,
-                title = "Mischief Manor",
-                world = "Cat & Mouse Chase",
-                isUnlocked = isLoggedIn,
-                stars = 0,
-                emoji = "🐭",
-                color = RainbowViolet,
-                position = IslandPosition(0.89f, 0.10f),
-                islandImageRes = R.drawable.island6
-            ),
-            GameLevel(
-                number = 8,
-                title = "Tech Tower",
-                world = "Stark Industries",
-                isUnlocked = isLoggedIn,
-                stars = 0,
-                emoji = "🤖",
-                color = RainbowGreen,
-                position = IslandPosition(1.00f, 0f),
-                islandImageRes = R.drawable.island2
+                position = IslandPosition(0.76f, 0.42f),
+                landImageRes = R.drawable.level_6
             )
-        )
-    }
-
-
-    val decorativeIslands = remember {
-        listOf(
-            DecorativeIsland(
-                imageRes = R.drawable.i_3, // Réutilise tes images existantes
-                position = IslandPosition(0.20f, -0.35f),
-                size = 0.9f,
-                offsetY = -200f
-            ),
-            DecorativeIsland(
-                imageRes = R.drawable.i_2,
-                position = IslandPosition(0.48f, 0.30f),
-                size = 0.8f,
-                offsetY = -150f
-            ),
-            DecorativeIsland(
-                imageRes = R.drawable.i_4,
-                position = IslandPosition(0.72f, -0.25f),
-                size = 0.6f,
-                offsetY = -180f
-            ),
-            DecorativeIsland(
-                imageRes = R.drawable.i_1,
-                position = IslandPosition(0.95f, 0.25f),
-                size = 0.8f,
-                offsetY = -170f
-            )
-
         )
     }
 
@@ -258,8 +207,14 @@ fun HomeScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedOceanBackground()
+        // 1. ANIMATED OCEAN WITH CLOUDS AND BIRDS
+        OceanMapBackground(
+            waveOffset = waveOffset,
+            cloudOffset = cloudOffset,
+            birdOffset = birdOffset
+        )
 
+        // 2. LOADING
         if (isLoading) {
             Box(
                 modifier = Modifier
@@ -272,6 +227,7 @@ fun HomeScreen(
         }
 
         Column(modifier = Modifier.fillMaxSize()) {
+            // 3. HEADER
             CompactGameHeader(
                 userName = userName,
                 userPhotoUrl = userPhotoUrl,
@@ -282,194 +238,26 @@ fun HomeScreen(
                 onProfileClick = onNavigateToProfile
             )
 
+            // 4. 2D SCROLLABLE MAP
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .horizontalScroll(scrollState)
+                    .verticalScroll(verticalScrollState)
+                    .padding(top = 4.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .width(4200.dp) // Augmenté pour plus d'espace
-                        .fillMaxHeight()
+                        .width(2800.dp)
+                        .height(1800.dp)
                 ) {
-                    // Animated clouds in background
-                    AnimatedClouds()
-
-                    // Flying birds
-                    AnimatedBirds()
-
-
-                    decorativeIslands.forEach { decorativeIsland ->
-                        FloatingDecorativeIsland(
-                            decorativeIsland = decorativeIsland,
-                            mapWidth = 3800.dp
-                        )
-                    }
-
-                    // Wooden bridges between islands
-                    // Remplace la section Canvas des ponts par ce code avec des chaînes
-
-                    Canvas(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        val mapWidth = size.width
-                        val centerY = size.height / 2
-
-                        for (i in 0 until levels.size - 1) {
-                            val current = levels[i]
-                            val next = levels[i + 1]
-
-                            val startX = current.position.xOffset * mapWidth
-                            val startY = centerY + (current.position.yOffset * size.height * 0.4f)
-                            val endX = next.position.xOffset * mapWidth
-                            val endY = centerY + (next.position.yOffset * size.height * 0.4f)
-
-                            // ✅ CHAÎNE SUSPENDUE
-                            val chainPath = Path().apply {
-                                moveTo(startX, startY)
-                                // Courbe de la chaîne qui pend
-                                val controlY = ((startY + endY) / 2) + 120f // Plus de pendaison
-                                quadraticBezierTo(
-                                    (startX + endX) / 2, controlY,
-                                    endX, endY
-                                )
-                            }
-
-                            // Ombre de la chaîne
-                            drawPath(
-                                path = Path().apply {
-                                    moveTo(startX + 3f, startY + 3f)
-                                    val controlY = ((startY + endY) / 2) + 123f
-                                    quadraticBezierTo(
-                                        (startX + endX) / 2 + 3f, controlY,
-                                        endX + 3f, endY + 3f
-                                    )
-                                },
-                                color = Color.Black.copy(alpha = 0.3f),
-                                style = Stroke(width = 12f)
-                            )
-
-                            // Chaîne principale (métal gris foncé)
-                            drawPath(
-                                path = chainPath,
-                                color = if (next.isUnlocked)
-                                    Color(0xFF4A5568) // Gris métal foncé
-                                else
-                                    Color(0xFF718096).copy(alpha = 0.5f), // Gris clair pour verrouillé
-                                style = Stroke(
-                                    width = 10f,
-                                    cap = StrokeCap.Round
-                                )
-                            )
-
-                            // Reflet métallique sur la chaîne
-                            drawPath(
-                                path = Path().apply {
-                                    moveTo(startX - 1f, startY - 1f)
-                                    val controlY = ((startY + endY) / 2) + 119f
-                                    quadraticBezierTo(
-                                        (startX + endX) / 2 - 1f, controlY,
-                                        endX - 1f, endY - 1f
-                                    )
-                                },
-                                color = Color.White.copy(alpha = 0.3f),
-                                style = Stroke(width = 3f)
-                            )
-
-                            // ✅ MAILLONS DE LA CHAÎNE (effet réaliste)
-                            val distance = kotlin.math.sqrt(
-                                ((endX - startX) * (endX - startX) + (endY - startY) * (endY - startY)).toDouble()
-                            ).toFloat()
-                            val numLinks = (distance / 30f).toInt() // Un maillon tous les 30 pixels
-
-                            for (j in 0..numLinks) {
-                                val t = j.toFloat() / numLinks
-
-                                // Position sur la courbe
-                                val bezierX = (1 - t) * (1 - t) * startX +
-                                        2 * (1 - t) * t * ((startX + endX) / 2) +
-                                        t * t * endX
-                                val bezierY = (1 - t) * (1 - t) * startY +
-                                        2 * (1 - t) * t * (((startY + endY) / 2) + 120f) +
-                                        t * t * endY
-
-                                // Dessiner un maillon (petit ovale)
-                                val linkWidth = 8f
-                                val linkHeight = 14f
-
-                                // Ombre du maillon
-                                drawOval(
-                                    color = Color.Black.copy(alpha = 0.2f),
-                                    topLeft = Offset(bezierX - linkWidth / 2 + 1f, bezierY - linkHeight / 2 + 1f),
-                                    size = Size(linkWidth, linkHeight)
-                                )
-
-                                // Maillon métallique
-                                drawOval(
-                                    color = if (next.isUnlocked)
-                                        Color(0xFF4A5568)
-                                    else
-                                        Color(0xFF718096).copy(alpha = 0.5f),
-                                    topLeft = Offset(bezierX - linkWidth / 2, bezierY - linkHeight / 2),
-                                    size = Size(linkWidth, linkHeight)
-                                )
-
-                                // Reflet sur le maillon
-                                drawOval(
-                                    color = Color.White.copy(alpha = 0.4f),
-                                    topLeft = Offset(bezierX - linkWidth / 2 + 1f, bezierY - linkHeight / 2 + 1f),
-                                    size = Size(linkWidth / 2, linkHeight / 2)
-                                )
-                            }
-
-                            // ✅ CROCHETS AUX EXTRÉMITÉS (ancrage aux îles)
-                            fun drawHook(x: Float, y: Float) {
-                                // Base du crochet (cercle)
-                                drawCircle(
-                                    color = Color(0xFF2D3748),
-                                    radius = 12f,
-                                    center = Offset(x, y)
-                                )
-                                drawCircle(
-                                    color = Color(0xFF4A5568),
-                                    radius = 10f,
-                                    center = Offset(x, y)
-                                )
-
-                                // Reflet
-                                drawCircle(
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    radius = 4f,
-                                    center = Offset(x - 2f, y - 2f)
-                                )
-
-                                // Boulons du crochet (détails)
-                                drawCircle(
-                                    color = Color(0xFF2D3748),
-                                    radius = 2f,
-                                    center = Offset(x - 4f, y)
-                                )
-                                drawCircle(
-                                    color = Color(0xFF2D3748),
-                                    radius = 2f,
-                                    center = Offset(x + 4f, y)
-                                )
-                            }
-
-                            // Dessiner les crochets aux deux extrémités
-                            drawHook(startX, startY)
-                            drawHook(endX, endY)
-                        }
-                    }
-
-
-
-
-                    // ✅ ÎLES PRINCIPALES PLUS GRANDES
+                    // 5. ANIMATED ISLANDS ON MAP
                     levels.forEach { level ->
-                        FloatingIslandHorizontal(
+                        MapIsland(
                             level = level,
-                            mapWidth = 3800.dp,
+                            mapWidth = 1600.dp,
+                            mapHeight = 1400.dp,
+                            floatOffset = islandFloat,
                             onClick = {
                                 if (level.isUnlocked) {
                                     showComingSoonDialog = true
@@ -484,16 +272,14 @@ fun HomeScreen(
             }
         }
 
+        // DIALOGS
         if (showComingSoonDialog) {
             ComingSoonDialog { showComingSoonDialog = false }
         }
         if (showGuestLimitDialog) {
             GuestLimitDialog(
                 onDismiss = { showGuestLimitDialog = false },
-                onLoginClick = {
-                    showGuestLimitDialog = false
-                    showLoginDialog = true
-                }
+                onLoginClick = { showGuestLimitDialog = false; showLoginDialog = true }
             )
         }
         if (showLoginDialog) {
@@ -505,20 +291,12 @@ fun HomeScreen(
                         launcher = googleSignInLauncher,
                         onSuccess = { idToken ->
                             scope.launch {
-                                val result = authRepository.loginWithSocial(
-                                    token = idToken,
-                                    provider = "google"
-                                )
+                                val result = authRepository.loginWithSocial(token = idToken, provider = "google")
                                 isLoading = false
-                                result.onSuccess {
-                                    showLoginDialog = false
-                                }
-                                result.onFailure { }
+                                result.onSuccess { showLoginDialog = false }
                             }
                         },
-                        onFailure = {
-                            isLoading = false
-                        }
+                        onFailure = { isLoading = false }
                     )
                 },
                 onFacebookClick = {
@@ -528,20 +306,12 @@ fun HomeScreen(
                             activity = act,
                             onSuccess = { accessToken ->
                                 scope.launch {
-                                    val result = authRepository.loginWithSocial(
-                                        token = accessToken,
-                                        provider = "facebook"
-                                    )
+                                    val result = authRepository.loginWithSocial(token = accessToken, provider = "facebook")
                                     isLoading = false
-                                    result.onSuccess {
-                                        showLoginDialog = false
-                                    }
-                                    result.onFailure { }
+                                    result.onSuccess { showLoginDialog = false }
                                 }
                             },
-                            onFailure = {
-                                isLoading = false
-                            }
+                            onFailure = { isLoading = false }
                         )
                     }
                 }
@@ -550,212 +320,290 @@ fun HomeScreen(
     }
 }
 
-// ✅ COMPOSABLE POUR LES ÎLES DÉCORATIVES
+
 @Composable
-fun FloatingDecorativeIsland(
-    decorativeIsland: DecorativeIsland,
-    mapWidth: androidx.compose.ui.unit.Dp
-) {
-    val infiniteTransition = rememberInfiniteTransition(label = "decorative_island")
-
-    val floatOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 25f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "float"
-    )
-
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.97f,
-        targetValue = 1.03f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
-    Box(
-        modifier = Modifier
-            .offset(
-                x = (decorativeIsland.position.xOffset * mapWidth.value).dp,
-                y = 0.dp
-            )
-            .fillMaxHeight(),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(
-                    y = (decorativeIsland.position.yOffset * 200 +
-                            floatOffset + decorativeIsland.offsetY).dp
-                )
-                .scale(scale)
-                .alpha(0.7f),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(id = decorativeIsland.imageRes),
-                contentDescription = "Decorative Island",
-                modifier = Modifier.size((180 * decorativeIsland.size).dp),
-                contentScale = ContentScale.Fit,
-                alpha = 0.8f
-            )
-        }
-    }
-}
-
-// ✅ ÎLES PRINCIPALES ENCORE PLUS GRANDES
-@Composable
-fun FloatingIslandHorizontal(
+fun MapIsland(
     level: GameLevel,
     mapWidth: androidx.compose.ui.unit.Dp,
+    mapHeight: androidx.compose.ui.unit.Dp,
+    floatOffset: Float,
     onClick: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "island_${level.number}")
-
-    val floatOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 20f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000 + level.number * 200, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "float"
-    )
-
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.98f,
-        targetValue = 1.02f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
+    // Calculate floating animation
+    val floatY = sin(floatOffset + level.number * 0.5) * 8f
 
     Box(
         modifier = Modifier
             .offset(
-                x = (level.position.xOffset * mapWidth.value).dp,
-                y = 0.dp
+                x = (level.position.x * mapWidth.value).dp,
+                y = (level.position.y * mapHeight.value + floatY).dp
             )
-            .fillMaxHeight(),
+            .size(400.dp)
+            .zIndex(level.number.toFloat()),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .offset(y = (level.position.yOffset * 200 + floatOffset).dp)
-                .scale(scale),
-            contentAlignment = Alignment.Center
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+            // LEVEL CARD
+            Card(
+                modifier = Modifier
+                    .width(160.dp)
+                    .height(140.dp)
+                    .clickable(onClick = onClick),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (level.isUnlocked) Color.White else Color(0xFFE0E0E0)
+                ),
+                elevation = CardDefaults.cardElevation(
+                    defaultElevation = if (level.isUnlocked) 10.dp else 4.dp
+                ),
+                border = BorderStroke(
+                    width = 3.dp,
+                    color = if (level.isUnlocked) level.color else Color.Gray.copy(alpha = 0.3f)
+                )
             ) {
-                // ✅ ÎLES ENCORE PLUS GRANDES (380dp au lieu de 300dp)
-                Box(
-                    modifier = Modifier.size(380.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (level.islandImageRes != null) {
-                        Image(
-                            painter = painterResource(id = level.islandImageRes),
-                            contentDescription = "Island ${level.number}",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // ✅ CARTE DE NIVEAU PLUS GRANDE (180dp)
-                Card(
+                Column(
                     modifier = Modifier
-                        .size(180.dp)
-                        .offset(y = (-160).dp)
-                        .clickable(enabled = true, onClick = onClick),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (level.isUnlocked)
-                            Color.White
-                        else Color.White.copy(alpha = 0.7f)
-                    ),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = if (level.isUnlocked) 14.dp else 5.dp
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(70.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (level.isUnlocked) level.color.copy(alpha = 0.2f)
-                                    else Color.LightGray.copy(alpha = 0.3f)
-                                )
-                                .border(4.dp, level.color, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
+                        .fillMaxSize()
+                        .background(
                             if (level.isUnlocked) {
-                                Text(text = level.emoji, fontSize = 38.sp)
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.White,
+                                        level.color.copy(alpha = 0.05f)
+                                    )
+                                )
                             } else {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Locked",
-                                    tint = Color.Gray,
-                                    modifier = Modifier.size(36.dp)
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color(0xFFF5F5F5),
+                                        Color(0xFFEEEEEE)
+                                    )
                                 )
                             }
+                        )
+                        .padding(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Emoji/Lock icon
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (level.isUnlocked) level.color.copy(alpha = 0.15f)
+                                else Color.Gray.copy(alpha = 0.2f)
+                            )
+                            .border(3.dp, level.color.copy(alpha = if (level.isUnlocked) 1f else 0.3f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (level.isUnlocked) {
+                            Text(text = level.emoji, fontSize = 28.sp)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Locked",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
+                    }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
+                    // Level number
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(level.color.copy(alpha = if (level.isUnlocked) 1f else 0.3f)),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
                             text = "${level.number}",
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 32.sp,
-                                color = level.color
+                                fontSize = 20.sp,
+                                color = Color.White
                             )
                         )
+                    }
 
-                        Text(
-                            text = level.title,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            textAlign = TextAlign.Center,
-                            maxLines = 2
-                        )
+                    // Level title
+                    Text(
+                        text = level.title,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (level.isUnlocked) Color.Black else Color.Gray
+                        ),
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        lineHeight = 11.sp
+                    )
 
-                        if (level.isUnlocked) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                repeat(3) { index ->
-                                    Icon(
-                                        imageVector = Icons.Default.Star,
-                                        contentDescription = "Star",
-                                        tint = if (index < level.stars)
-                                            RainbowYellow
-                                        else Color.LightGray,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                    // Stars
+                    if (level.isUnlocked) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            repeat(3) { i ->
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "Star ${i + 1}",
+                                    tint = if (i < level.stars) RainbowYellow else Color.LightGray,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
+                    } else {
+                        Text(
+                            text = "Locked",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.sp,
+                                color = Color.Gray,
+                                fontWeight = FontWeight.Bold
+                            )
+                        )
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // LAND IMAGE with subtle shadow
+            Box(
+                modifier = Modifier.size(300.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Shadow
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawOval(
+                        color = Color.Black.copy(alpha = 0.2f),
+                        topLeft = Offset(size.width * 0.2f, size.height * 0.85f),
+                        size = androidx.compose.ui.geometry.Size(size.width * 0.6f, size.height * 0.1f)
+                    )
+                }
+
+                // Island image
+                Image(
+                    painter = painterResource(id = level.landImageRes),
+                    contentDescription = "Island ${level.number}",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                    alpha = if (level.isUnlocked) 1f else 0.6f
+                )
+            }
+        }
+    }
+}
+
+// OCEAN with sea.png background, animated waves, clouds, and birds
+@Composable
+fun OceanMapBackground(
+    waveOffset: Float,
+    cloudOffset: Float,
+    birdOffset: Float
+) {
+    // Initialize clouds
+    val clouds = remember {
+        listOf(
+            Cloud(1, -200f, 100f, 120f, 1.2f, 0.7f),
+            Cloud(2, 300f, 180f, 150f, 0.8f, 0.6f),
+            Cloud(3, 800f, 80f, 100f, 1.5f, 0.8f),
+            Cloud(4, 1200f, 220f, 130f, 1.0f, 0.65f),
+            Cloud(5, 1600f, 140f, 140f, 0.9f, 0.75f),
+            Cloud(6, 2000f, 190f, 110f, 1.3f, 0.7f)
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background image (sea.png)
+        Image(
+            painter = painterResource(id = R.drawable.sea),
+            contentDescription = "Ocean Background",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
+        // Canvas for waves, clouds, and birds
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val width = size.width
+            val height = size.height
+
+            // DRAW CLOUDS
+            clouds.forEach { cloud ->
+                val cloudX = (cloud.x + cloudOffset * cloud.speed) % (width + 400f) - 200f
+
+                // Draw cloud using circles
+                val cloudColor = Color.White.copy(alpha = cloud.alpha)
+
+                // Main cloud body (3 overlapping circles)
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.5f,
+                    center = Offset(cloudX, cloud.y)
+                )
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.6f,
+                    center = Offset(cloudX + cloud.size * 0.4f, cloud.y)
+                )
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.55f,
+                    center = Offset(cloudX + cloud.size * 0.8f, cloud.y + cloud.size * 0.1f)
+                )
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.45f,
+                    center = Offset(cloudX - cloud.size * 0.3f, cloud.y + cloud.size * 0.15f)
+                )
+            }
+
+
+
+            // ANIMATED WAVES
+            val waveCount = 8
+            val baseWaveHeight = 15f
+            val waveLength = width / 3f
+
+            for (i in 0 until waveCount) {
+                val yOffset = height * 0.3f + i * 60f
+                val phase = waveOffset + i * 0.5f
+                val waveHeight = baseWaveHeight * (1f - i * 0.06f)
+
+                val path = Path().apply {
+                    var x = -waveLength
+                    moveTo(x, yOffset)
+
+                    while (x < width + waveLength) {
+                        val angle = (x + phase * 10f) / waveLength * Math.PI * 2
+                        val y = yOffset + waveHeight * sin(angle).toFloat()
+                        lineTo(x, y)
+                        x += 10f
+                    }
+
+                    lineTo(width + waveLength, height)
+                    lineTo(-waveLength, height)
+                    close()
+                }
+
+                // Subtle wave overlay
+                drawPath(
+                    path = path,
+                    color = Color.White.copy(alpha = 0.08f - i * 0.008f)
+                )
+
+                // Wave highlights
+                if (i % 2 == 0) {
+                    drawPath(
+                        path = path,
+                        color = Color.White.copy(alpha = 0.15f - i * 0.015f),
+                        style = Stroke(width = 1.5f)
+                    )
                 }
             }
         }
@@ -765,6 +613,12 @@ fun FloatingIslandHorizontal(
 
 
 
+
+
+
+
+
+// Compact game header
 @Composable
 fun CompactGameHeader(
     userName: String,
@@ -778,25 +632,20 @@ fun CompactGameHeader(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(12.dp),
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.95f)
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
         elevation = CardDefaults.cardElevation(6.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
-                onClick = {
-                    SoundManager.playClick()
-                    onBackClick()
-                },
+                onClick = { SoundManager.playClick(); onBackClick() },
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
@@ -821,28 +670,19 @@ fun CompactGameHeader(
                     modifier = Modifier
                         .size(45.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(RainbowOrange, RainbowPink)
-                            )
-                        )
+                        .background(Brush.linearGradient(listOf(RainbowOrange, RainbowPink)))
                         .clickable(onClick = onProfileClick),
                     contentAlignment = Alignment.Center
                 ) {
                     if (userPhotoUrl != null) {
                         AsyncImage(
                             model = userPhotoUrl,
-                            contentDescription = "Profile Photo",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(CircleShape),
+                            contentDescription = "Profile",
+                            modifier = Modifier.fillMaxSize().clip(CircleShape),
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Text(
-                            text = if (isLoggedIn) "🎹" else "👤",
-                            fontSize = 24.sp
-                        )
+                        Text(text = "🎹", fontSize = 24.sp)
                     }
                 }
 
@@ -894,290 +734,6 @@ fun CompactGameHeader(
     }
 }
 
-
-@Composable
-fun AnimatedOceanBackground() {
-    val infiniteTransition = rememberInfiniteTransition(label = "ocean")
-
-    val wavePhase1 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(8000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "wave1"
-    )
-
-    val wavePhase2 by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(6000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "wave2"
-    )
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
-
-        drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF87CEEB),
-                    Color(0xFF6DB4E0),
-                    Color(0xFF4A9FD8),
-                    Color(0xFF3A8FCC)
-                )
-            )
-        )
-
-        for (layer in 0 until 5) {
-            val wavePath = Path()
-            val amplitude = 30f + layer * 15f
-            val frequency = 0.01f - layer * 0.001f
-            val yBase = height * 0.5f + layer * 60f
-            val phase = if (layer % 2 == 0) wavePhase1 else wavePhase2
-
-            wavePath.moveTo(0f, yBase)
-
-            for (x in 0 until (width * 2).toInt() step 5) {
-                val y = yBase + amplitude * sin((x * frequency + phase * 0.02f).toDouble()).toFloat()
-                wavePath.lineTo(x.toFloat(), y)
-            }
-
-            wavePath.lineTo(width * 2, height)
-            wavePath.lineTo(0f, height)
-            wavePath.close()
-
-            drawPath(
-                path = wavePath,
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF4FC3F7).copy(alpha = 0.3f - layer * 0.05f),
-                        Color(0xFF29B6F6).copy(alpha = 0.2f - layer * 0.04f),
-                        Color(0xFF03A9F4).copy(alpha = 0.1f - layer * 0.03f)
-                    ),
-                    startY = yBase,
-                    endY = height
-                )
-            )
-
-            val highlightPath = Path()
-            highlightPath.moveTo(0f, yBase)
-            for (x in 0 until (width * 2).toInt() step 5) {
-                val y = yBase + amplitude * sin((x * frequency + phase * 0.02f).toDouble()).toFloat()
-                highlightPath.lineTo(x.toFloat(), y)
-            }
-
-            drawPath(
-                path = highlightPath,
-                color = Color.White.copy(alpha = 0.15f - layer * 0.02f),
-                style = Stroke(width = 2f)
-            )
-        }
-    }
-}
-
-@Composable
-fun AnimatedClouds() {
-    val infiniteTransition = rememberInfiniteTransition(label = "clouds")
-
-    val cloud1X by infiniteTransition.animateFloat(
-        initialValue = -300f,
-        targetValue = 3800f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(45000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "cloud1"
-    )
-
-    val cloud2X by infiniteTransition.animateFloat(
-        initialValue = 500f,
-        targetValue = 4300f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(55000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "cloud2"
-    )
-
-    val cloud3X by infiniteTransition.animateFloat(
-        initialValue = 1200f,
-        targetValue = 5000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(50000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "cloud3"
-    )
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val height = size.height
-
-        fun drawCloud(x: Float, y: Float, scale: Float) {
-            translate(x, y) {
-                // Main cloud circles
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.8f),
-                    radius = 40f * scale,
-                    center = Offset(0f, 0f)
-                )
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.8f),
-                    radius = 50f * scale,
-                    center = Offset(45f * scale, -10f * scale)
-                )
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.8f),
-                    radius = 45f * scale,
-                    center = Offset(90f * scale, 0f)
-                )
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.8f),
-                    radius = 35f * scale,
-                    center = Offset(45f * scale, 15f * scale)
-                )
-            }
-        }
-
-        // Draw multiple clouds at different positions
-        drawCloud(cloud1X, height * 0.12f, 1.2f)
-        drawCloud(cloud2X, height * 0.20f, 0.9f)
-        drawCloud(cloud3X, height * 0.15f, 1.1f)
-        drawCloud(cloud1X + 600f, height * 0.25f, 0.8f)
-        drawCloud(cloud2X - 400f, height * 0.10f, 1.0f)
-        drawCloud(cloud3X + 300f, height * 0.22f, 1.3f)
-    }
-}
-
-@Composable
-fun AnimatedBirds() {
-    val infiniteTransition = rememberInfiniteTransition(label = "birds")
-
-    // More birds with different positions
-    val bird1X by infiniteTransition.animateFloat(
-        initialValue = -100f,
-        targetValue = 3700f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(28000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "bird1X"
-    )
-
-    val bird1Y by infiniteTransition.animateFloat(
-        initialValue = 80f,
-        targetValue = 120f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bird1Y"
-    )
-
-    val bird2X by infiniteTransition.animateFloat(
-        initialValue = 400f,
-        targetValue = 4100f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(35000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "bird2X"
-    )
-
-    val bird2Y by infiniteTransition.animateFloat(
-        initialValue = 150f,
-        targetValue = 180f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2500, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bird2Y"
-    )
-
-    val bird3X by infiniteTransition.animateFloat(
-        initialValue = 800f,
-        targetValue = 4500f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(32000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "bird3X"
-    )
-
-    val bird3Y by infiniteTransition.animateFloat(
-        initialValue = 100f,
-        targetValue = 140f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2800, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "bird3Y"
-    )
-
-    val wingFlap by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "wingFlap"
-    )
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        fun drawBird(x: Float, y: Float, scale: Float = 1f) {
-            val wingAngle = wingFlap * 35f
-
-            translate(x - 15f * scale, y) {
-                rotate(-wingAngle, pivot = Offset(0f, 0f)) {
-                    drawPath(
-                        path = Path().apply {
-                            moveTo(0f, 0f)
-                            quadraticBezierTo(-22f * scale, -17f * scale, -33f * scale, -11f * scale)
-                            quadraticBezierTo(-22f * scale, -6f * scale, 0f, 0f)
-                        },
-                        color = Color(0xFF2C3E50),
-                        style = Stroke(width = 2.5f * scale)
-                    )
-                }
-            }
-
-            drawCircle(
-                color = Color(0xFF2C3E50),
-                radius = 9f * scale,
-                center = Offset(x, y)
-            )
-
-            translate(x + 15f * scale, y) {
-                rotate(wingAngle, pivot = Offset(0f, 0f)) {
-                    drawPath(
-                        path = Path().apply {
-                            moveTo(0f, 0f)
-                            quadraticBezierTo(22f * scale, -17f * scale, 33f * scale, -11f * scale)
-                            quadraticBezierTo(22f * scale, -6f * scale, 0f, 0f)
-                        },
-                        color = Color(0xFF2C3E50),
-                        style = Stroke(width = 2.5f * scale)
-                    )
-                }
-            }
-        }
-
-        // Draw multiple birds
-        drawBird(bird1X, bird1Y, 1.3f)
-        drawBird(bird2X, bird2Y, 1.1f)
-        drawBird(bird3X, bird3Y, 1.0f)
-        drawBird(bird1X + 250f, bird1Y + 40f, 0.9f)
-        drawBird(bird2X - 200f, bird2Y - 30f, 1.2f)
-        drawBird(bird3X + 150f, bird3Y + 20f, 0.8f)
-    }
-}
-
 @Composable
 fun ComingSoonDialog(onDismiss: () -> Unit) {
     AlertDialog(
@@ -1195,52 +751,27 @@ fun ComingSoonDialog(onDismiss: () -> Unit) {
             )
         },
         text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "This level is under construction!",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp),
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "We're working hard to bring you an amazing piano learning experience! 🎹",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 16.sp,
-                        color = TextLight
-                    ),
-                    textAlign = TextAlign.Center
-                )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("This level is under construction!", fontSize = 20.sp, textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("We're working hard to bring you an amazing piano experience! ✨", fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center)
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    SoundManager.playClick()
-                    onDismiss()
-                },
+                onClick = { SoundManager.playClick(); onDismiss() },
                 colors = ButtonDefaults.buttonColors(containerColor = RainbowBlue),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Got it!",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+                Text("Got it!", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         },
         containerColor = Color.White,
         shape = RoundedCornerShape(28.dp)
     )
 }
-
 @Composable
-fun GuestLimitDialog(
-    onDismiss: () -> Unit,
-    onLoginClick: () -> Unit
-) {
+fun GuestLimitDialog(onDismiss: () -> Unit, onLoginClick: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Text(text = "🔒", fontSize = 64.sp) },
@@ -1256,48 +787,24 @@ fun GuestLimitDialog(
             )
         },
         text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "This level is locked for guests!",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp),
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "Create an account or login to unlock all levels and save your progress! 🎹✨",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 16.sp,
-                        color = TextLight
-                    ),
-                    textAlign = TextAlign.Center
-                )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("This level is locked for guests!", fontSize = 20.sp, textAlign = TextAlign.Center)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Login to unlock all levels and save your progress! 🎮", fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center)
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    SoundManager.playClick()
-                    onLoginClick()
-                },
+                onClick = { SoundManager.playClick(); onLoginClick() },
                 colors = ButtonDefaults.buttonColors(containerColor = RainbowBlue),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Login Now",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+                Text("Login Now", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = {
-                SoundManager.playClick()
-                onDismiss()
-            }) {
-                Text("Maybe Later", color = TextLight)
+            TextButton(onClick = { SoundManager.playClick(); onDismiss() }) {
+                Text("Maybe Later", color = Color.Gray)
             }
         },
         containerColor = Color.White,
