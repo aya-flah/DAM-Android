@@ -1,7 +1,7 @@
 
 package com.pianokids.game.data.models
 
-import User
+import com.pianokids.game.data.models.User
 import com.google.gson.annotations.SerializedName
 
 data class AuthResponse(

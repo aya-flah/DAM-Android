@@ -5,9 +5,9 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.pianokids.game.screens.HomeScreen
-import com.pianokids.game.screens.ProfileScreen
-import com.pianokids.game.screens.WelcomeScreen
+import com.pianokids.game.view.screens.HomeScreen
+import com.pianokids.game.view.screens.ProfileScreen
+import com.pianokids.game.view.screens.WelcomeScreen
 
 sealed class Screen(val route: String) {
     object Welcome : Screen("welcome")
@@ -19,7 +19,7 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
-fun AppNavigation(context: Context) {               // <-- added Context param
+fun AppNavigation(context: Context) {
     val navController = rememberNavController()
 
     NavHost(

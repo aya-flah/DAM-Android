@@ -1,4 +1,4 @@
-package com.pianokids.game.screens
+package com.pianokids.game.view.screens
 
 import android.app.Activity
 import android.widget.Toast
@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -35,7 +36,6 @@ import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.ui.theme.*
 import com.pianokids.game.utils.components.AnimatedOceanWithIslands
 import com.pianokids.game.utils.components.RainbowButton
-import com.pianokids.game.utils.components.SettingsDialog
 import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.UserPreferences
@@ -66,6 +66,9 @@ fun WelcomeScreen(
     val authViewModel: AuthViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
 
+    // ✅ CHECK IF USER HAS PLAYED BEFORE
+    val hasPlayedBefore = remember { userPrefs.getSeenWelcome() || isLoggedIn }
+
     // Google Sign-In Launcher
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -93,7 +96,7 @@ fun WelcomeScreen(
     // START MUSIC ONCE
     DisposableEffect(Unit) {
         SoundManager.startBackgroundMusic()
-        onDispose {  }
+        onDispose { }
     }
 
     Box(
@@ -103,11 +106,10 @@ fun WelcomeScreen(
     ) {
         AnimatedOceanWithIslands()
 
-
         if (showButtons && !isLoading) {
             IconButton(
                 onClick = {
-                    showSettings = true;
+                    showSettings = true
                     SoundManager.playClick()
                 },
                 modifier = Modifier
@@ -124,7 +126,7 @@ fun WelcomeScreen(
             }
         }
 
-        // Loading Overlay - FIXED: Moved after settings button
+        // Loading Overlay
         if (isLoading) {
             Box(
                 modifier = Modifier
@@ -136,7 +138,7 @@ fun WelcomeScreen(
             }
         }
 
-        // MAIN CONTENT – CENTERED + SLIGHT RIGHT OFFSET - FIXED: More right padding
+        // MAIN CONTENT
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -144,7 +146,7 @@ fun WelcomeScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
-        )  {
+        ) {
             // Logo
             Image(
                 painter = painterResource(R.drawable.cat_logo),
@@ -167,7 +169,7 @@ fun WelcomeScreen(
                     color = Color.White,
                     shadow = Shadow(
                         Color.Black.copy(0.3f),
-                        androidx.compose.ui.geometry.Offset(4f, 4f),
+                        Offset(4f, 4f),
                         8f
                     )
                 ),
@@ -192,16 +194,31 @@ fun WelcomeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    if (isLoggedIn) {
+                    // ✅ SHOW "CONTINUE" IF USER HAS PLAYED BEFORE
+                    if (hasPlayedBefore) {
                         RainbowButton(
-                            text = "Continue",
+                            text = "Continue Game",
                             onClick = {
                                 SoundManager.playClick()
                                 onNavigateToHome()
                             },
                             colors = listOf(RainbowGreen, RainbowYellow)
                         )
+
+                        if (!isLoggedIn) {
+                            Spacer(Modifier.height(12.dp))
+
+                            RainbowButton(
+                                text = "Login / Sign-up",
+                                onClick = {
+                                    SoundManager.playClick()
+                                    showLoginChooser = true
+                                },
+                                colors = listOf(RainbowBlue, RainbowIndigo)
+                            )
+                        }
                     } else {
+                        // FIRST TIME USER
                         RainbowButton(
                             text = "Play as Guest",
                             onClick = {
@@ -232,24 +249,7 @@ fun WelcomeScreen(
 
         // Settings Dialog
         if (showSettings) {
-            SettingsDialog(
-                onDismiss = { showSettings = false },
-                soundEnabled = soundEnabled,
-                musicEnabled = musicEnabled,
-                vibrationEnabled = vibrationEnabled,
-                onSoundToggle = {
-                    soundEnabled = it
-                    if (it) SoundManager.enableSound() else SoundManager.disableSound()
-                },
-                onMusicToggle = {
-                    musicEnabled = it
-                    if (it) SoundManager.enableMusic() else SoundManager.disableMusic()
-                },
-                onVibrationToggle = {
-                    vibrationEnabled = it
-                    if (it) SoundManager.enableVibration() else SoundManager.disableVibration()
-                }
-            )
+            SettingsDialog(onDismiss = { showSettings = false })
         }
 
         // Login Chooser
@@ -272,6 +272,7 @@ fun WelcomeScreen(
                                             val result = authRepository.loginWithSocial(idToken, "google")
                                             isLoading = false
                                             result.onSuccess {
+                                                userPrefs.setSeenWelcome(true)
                                                 Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
                                                 onNavigateToHome()
                                             }.onFailure {
@@ -304,6 +305,7 @@ fun WelcomeScreen(
                                                     val result = authRepository.loginWithSocial(accessToken, "facebook")
                                                     isLoading = false
                                                     result.onSuccess {
+                                                        userPrefs.setSeenWelcome(true)
                                                         Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
                                                         onNavigateToHome()
                                                     }.onFailure {

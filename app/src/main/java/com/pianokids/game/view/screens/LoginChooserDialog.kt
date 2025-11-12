@@ -1,5 +1,4 @@
-// LoginChooserDialog.kt
-package com.pianokids.game.screens
+package com.pianokids.game.view.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -12,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pianokids.game.R
@@ -25,7 +25,7 @@ fun LoginChooserDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Choose Login Method", textAlign = androidx.compose.ui.text.style.TextAlign.Center) },
+        title = { Text("Choose Login Method", textAlign = TextAlign.Center) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(

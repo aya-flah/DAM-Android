@@ -1,7 +1,7 @@
 // UserPreferences.kt
 package com.pianokids.game.utils
 
-import User
+import com.pianokids.game.data.models.User
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
@@ -9,6 +9,7 @@ import androidx.core.content.edit
 import com.google.gson.Gson
 
 import com.pianokids.game.data.repository.AuthRepository
+import com.pianokids.game.utils.UserPreferences.Companion.KEY_AUTH_TOKEN
 
 class UserPreferences(private val context: Context) {      // <-- keep it as a property
     private val prefs: SharedPreferences =
@@ -19,6 +20,33 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
     internal suspend fun verifyTokenWithBackend(): Boolean {
         return AuthRepository(context).verifyToken()
     }
+
+
+    // ----- Music -------------------------------------------------
+    fun getMusicEnabled(): Boolean = prefs.getBoolean("music_enabled", true)
+    fun setMusicEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean("music_enabled", enabled).apply()
+
+    fun getMusicVolume(): Int = prefs.getInt("music_volume", 70)
+    fun setMusicVolume(volume: Int) =
+        prefs.edit().putInt("music_volume", volume.coerceIn(0, 100)).apply()
+
+    // ----- Sound -------------------------------------------------
+    fun getSoundEnabled(): Boolean = prefs.getBoolean("sound_enabled", true)
+    fun setSoundEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean("sound_enabled", enabled).apply()
+
+    fun getSoundVolume(): Int = prefs.getInt("sound_volume", 80)
+    fun setSoundVolume(volume: Int) =
+        prefs.edit().putInt("sound_volume", volume.coerceIn(0, 100)).apply()
+
+    // ----- Vibration ---------------------------------------------
+    fun getVibrationEnabled(): Boolean = prefs.getBoolean("vibration_enabled", true)
+    fun setVibrationEnabled(enabled: Boolean) =
+        prefs.edit().putBoolean("vibration_enabled", enabled).apply()
+
+
+
 
     // ── AUTH TOKEN ─────────────────────────────────────────────────────────
     fun saveAuthToken(token: String?) {
@@ -87,6 +115,13 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
     fun getLevel(): Int = prefs.getInt("level", 1)
     fun getTotalStars(): Int = prefs.getInt("total_stars", 0)
 
+    fun setSeenWelcome(seen: Boolean) {
+        prefs.edit().putBoolean("seen_welcome", seen).apply()
+    }
+
+    fun getSeenWelcome(): Boolean {
+        return prefs.getBoolean("seen_welcome", false)
+    }
     // ── Save extra data when logging in ───────────────────────────────────
     fun saveUserData(name: String, email: String?, level: Int, stars: Int) {
         prefs.edit()
@@ -96,12 +131,13 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
             .putInt("total_stars", stars)
             .apply()
     }
-    // Add to your existing UserPreferences class
-    fun setSeenWelcome(seen: Boolean) {
-        prefs.edit {
-            putBoolean(KEY_SEEN_WELCOME, seen)
-        }
+    fun saveFullName(name: String) {
+        prefs.edit()
+            .putString("full_name", name)
+
+            .apply()
     }
+
 
     fun hasSeenWelcome(): Boolean {
         return prefs.getBoolean(KEY_SEEN_WELCOME, false)

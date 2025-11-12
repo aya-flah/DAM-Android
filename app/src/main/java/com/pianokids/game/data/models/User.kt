@@ -1,3 +1,5 @@
+package com.pianokids.game.data.models
+
 import com.google.gson.annotations.SerializedName
 
 data class User(
@@ -11,7 +13,7 @@ data class User(
     val name: String,
 
     @SerializedName("photoUrl")
-    val photoUrl: String? = null, // Make sure this matches backend
+    val photoUrl: String? = null,
 
     @SerializedName("provider")
     val provider: String,
