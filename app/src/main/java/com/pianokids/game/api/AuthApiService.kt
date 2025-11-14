@@ -1,4 +1,3 @@
-
 package com.pianokids.game.data.api
 
 import com.pianokids.game.data.models.AuthResponse
@@ -8,16 +7,25 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
-// AuthApiService.kt
+
 interface AuthApiService {
-    @POST("/auth/social-login") // Make sure the path is correct
+    @POST("/auth/social-login")
     suspend fun socialLogin(@Body request: SocialLoginRequest): Response<AuthResponse>
 
     @GET("/auth/verify")
-    suspend fun verifyToken(@Header("Authorization") token: String): Response<Unit>
+    suspend fun verifyToken(
+        @Header("X-Auth-Token") authToken: String,
+        @Header("X-Provider-ID") providerId: String
+    ): Response<VerifyResponse>
 }
 
-data class SocialLoginRequest(
-    val token: String,
-    val provider: String
+data class VerifyResponse(
+    val valid: Boolean,
+    val user: VerifyUser
+)
+
+data class VerifyUser(
+    val id: String,
+    val email: String,
+    val name: String
 )

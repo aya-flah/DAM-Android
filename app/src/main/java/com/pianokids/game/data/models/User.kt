@@ -13,14 +13,17 @@ data class User(
     val name: String,
 
     @SerializedName("photoUrl")
-    val photoUrl: String? = null,
+    val photoUrl: String = "",
 
     @SerializedName("provider")
     val provider: String,
 
+    @SerializedName("providerId")
+    val providerId: String,
+
     @SerializedName("score")
-    val score: Int,
+    val score: Int = 0,
 
     @SerializedName("level")
-    val level: Int
+    val level: Int = 1
 )

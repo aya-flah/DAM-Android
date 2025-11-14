@@ -15,7 +15,6 @@ class AuthRepository(context: Context) {
     private val api: AuthApiService = RetrofitClient.authApi
     private val prefs = UserPreferences(context)
 
-    // AuthRepository.kt
     suspend fun loginWithSocial(token: String?, provider: String): Result<AuthResponse> {
         return withContext(Dispatchers.IO) {
             try {
@@ -37,29 +36,26 @@ class AuthRepository(context: Context) {
                     Log.d("AuthRepository", "Response body: $authResponse")
 
                     if (authResponse != null) {
-                        // EXTRA DEBUGGING: Log the actual accessToken
-                        Log.d("AuthRepository", "AccessToken received: ${authResponse.accessToken?.take(10)}...")
+                        Log.d("AuthRepository", "AuthToken received: ${authResponse.authToken.take(10)}...")
+                        Log.d("AuthRepository", "ProviderId received: ${authResponse.providerId}")
                         Log.d("AuthRepository", "User received: ${authResponse.user}")
 
-                        if (authResponse.accessToken.isNullOrEmpty()) {
-                            Log.e("AuthRepository", "Server returned null or empty access token")
-                            // Let's see the raw response
-                            val rawResponse = response.raw().toString()
-                            Log.e("AuthRepository", "Raw response: ${rawResponse.take(500)}")
+                        if (authResponse.authToken.isEmpty()) {
+                            Log.e("AuthRepository", "Server returned null or empty auth token")
                             return@withContext Result.failure(Exception("Authentication failed - no token received from server"))
                         }
 
-                        // Save JWT token and user data
-                        prefs.saveAuthToken(authResponse.accessToken)
+                        // Save HMAC auth token, provider ID, and user data
+                        prefs.saveAuthToken(authResponse.authToken)
+                        prefs.saveProviderId(authResponse.providerId)
                         authResponse.user?.let { user ->
                             prefs.saveUser(user)
                         }
 
-                        Log.d("AuthRepository", "Social login successful, token saved")
+                        Log.d("AuthRepository", "Social login successful, token and providerId saved")
                         Result.success(authResponse)
                     } else {
                         Log.e("AuthRepository", "Response body is null")
-                        // Try to get error body
                         val errorBody = response.errorBody()?.string()
                         Log.e("AuthRepository", "Error body: $errorBody")
                         Result.failure(Exception("Server returned empty response: $errorBody"))
@@ -75,12 +71,20 @@ class AuthRepository(context: Context) {
             }
         }
     }
+
     suspend fun verifyToken(): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val token = prefs.getAuthToken() ?: return@withContext false
-                val response = api.verifyToken("Bearer $token")
-                response.isSuccessful
+                val providerId = prefs.getProviderId() ?: return@withContext false
+
+                Log.d("AuthRepository", "Verifying token with providerId: $providerId")
+
+                val response = api.verifyToken(token, providerId)
+                val isValid = response.isSuccessful
+
+                Log.d("AuthRepository", "Token verification result: $isValid")
+                isValid
             } catch (e: Exception) {
                 Log.e("AuthRepository", "Token verification failed", e)
                 false

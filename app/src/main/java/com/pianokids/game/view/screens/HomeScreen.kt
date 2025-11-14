@@ -121,14 +121,18 @@ fun HomeScreen(
             kotlinx.coroutines.delay(50)
         }
     }
+// In HomeScreen, replace the levels definition with this:
 
-    val levels = remember(isLoggedIn) {
+    val levels = remember(isLoggedIn, user) {
+        // Get the user's unlocked levels (only level 1 for now)
+        val unlockedLevels = userPrefs.getUnlockedLevels() // Returns listOf(1)
+
         listOf(
             GameLevel(
                 number = 1,
                 title = "Gotham Nights",
                 world = "Dark Knight City",
-                isUnlocked = true,
+                isUnlocked = true, // Level 1 is always unlocked for everyone
                 stars = 3,
                 emoji = "🦇",
                 color = Color(0xFF1A1A1A),
@@ -139,7 +143,7 @@ fun HomeScreen(
                 number = 2,
                 title = "Web of Justice",
                 world = "Hero's Landing",
-                isUnlocked = isLoggedIn,
+                isUnlocked = unlockedLevels.contains(2), // Unlocked only if in user's progress
                 stars = 2,
                 emoji = "🕷️",
                 color = RainbowRed,
@@ -150,7 +154,7 @@ fun HomeScreen(
                 number = 3,
                 title = "Moonlight Magic",
                 world = "Crystal Kingdom",
-                isUnlocked = isLoggedIn,
+                isUnlocked = unlockedLevels.contains(3),
                 stars = 1,
                 emoji = "🌙",
                 color = RainbowPink,
@@ -161,7 +165,7 @@ fun HomeScreen(
                 number = 6,
                 title = "Electric Meadow",
                 world = "Pokémon Plains",
-                isUnlocked = isLoggedIn,
+                isUnlocked = unlockedLevels.contains(6),
                 stars = 0,
                 emoji = "⚡",
                 color = RainbowYellow,
@@ -172,7 +176,7 @@ fun HomeScreen(
                 number = 5,
                 title = "Shield of Justice",
                 world = "Avengers Base",
-                isUnlocked = isLoggedIn,
+                isUnlocked = unlockedLevels.contains(5),
                 stars = 0,
                 emoji = "🛡️",
                 color = RainbowBlue,
@@ -183,7 +187,7 @@ fun HomeScreen(
                 number = 4,
                 title = "Hidden Village",
                 world = "Ninja Path",
-                isUnlocked = isLoggedIn,
+                isUnlocked = unlockedLevels.contains(4),
                 stars = 0,
                 emoji = "🥷",
                 color = RainbowIndigo,
@@ -192,7 +196,6 @@ fun HomeScreen(
             )
         )
     }
-
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -285,6 +288,9 @@ fun HomeScreen(
         if (showLoginDialog) {
             LoginChooserDialog(
                 onDismiss = { showLoginDialog = false },
+                // In HomeScreen, update the login callbacks:
+
+// For Google login:
                 onGoogleClick = {
                     isLoading = true
                     socialLoginManager.signInWithGoogle(
@@ -293,12 +299,17 @@ fun HomeScreen(
                             scope.launch {
                                 val result = authRepository.loginWithSocial(token = idToken, provider = "google")
                                 isLoading = false
-                                result.onSuccess { showLoginDialog = false }
+                                result.onSuccess {
+                                    authViewModel.onLoginSuccess() // ✅ ADD THIS
+                                    showLoginDialog = false
+                                }
                             }
                         },
                         onFailure = { isLoading = false }
                     )
                 },
+
+// For Facebook login:
                 onFacebookClick = {
                     activity?.let { act ->
                         isLoading = true
@@ -308,7 +319,10 @@ fun HomeScreen(
                                 scope.launch {
                                     val result = authRepository.loginWithSocial(token = accessToken, provider = "facebook")
                                     isLoading = false
-                                    result.onSuccess { showLoginDialog = false }
+                                    result.onSuccess {
+                                        authViewModel.onLoginSuccess() // ✅ ADD THIS
+                                        showLoginDialog = false
+                                    }
                                 }
                             },
                             onFailure = { isLoading = false }

@@ -7,20 +7,12 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.core.content.edit
 import com.google.gson.Gson
+import com.pianokids.game.data.models.AuthUser
 
-import com.pianokids.game.data.repository.AuthRepository
-import com.pianokids.game.utils.UserPreferences.Companion.KEY_AUTH_TOKEN
-
-class UserPreferences(private val context: Context) {      // <-- keep it as a property
+class UserPreferences(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("piano_kids_prefs", Context.MODE_PRIVATE)
     private val gson = Gson()
-
-    // keep the old suspend version **only** for AuthViewModel
-    internal suspend fun verifyTokenWithBackend(): Boolean {
-        return AuthRepository(context).verifyToken()
-    }
-
 
     // ----- Music -------------------------------------------------
     fun getMusicEnabled(): Boolean = prefs.getBoolean("music_enabled", true)
@@ -45,9 +37,6 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
     fun setVibrationEnabled(enabled: Boolean) =
         prefs.edit().putBoolean("vibration_enabled", enabled).apply()
 
-
-
-
     // ── AUTH TOKEN ─────────────────────────────────────────────────────────
     fun saveAuthToken(token: String?) {
         prefs.edit {
@@ -56,6 +45,9 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
                 Log.w("UserPreferences", "Attempted to save null or empty token")
             } else {
                 putString(KEY_AUTH_TOKEN, token)
+                // Clear guest mode when saving a real auth token
+                putBoolean(PREF_IS_GUEST, false)
+                Log.d("UserPreferences", "Auth token saved, guest mode cleared")
             }
         }
     }
@@ -68,14 +60,31 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
         return !getAuthToken().isNullOrEmpty()
     }
 
-    // ── User ─────────────────────────────────────────────────────────────
+    // ── PROVIDER ID ────────────────────────────────────────────────────────
+    fun saveProviderId(providerId: String?) {
+        prefs.edit {
+            if (providerId.isNullOrEmpty()) {
+                remove(KEY_PROVIDER_ID)
+                Log.w("UserPreferences", "Attempted to save null or empty provider ID")
+            } else {
+                putString(KEY_PROVIDER_ID, providerId)
+                Log.d("UserPreferences", "Provider ID saved: $providerId")
+            }
+        }
+    }
+
+    fun getProviderId(): String? {
+        return prefs.getString(KEY_PROVIDER_ID, null)
+    }
+
     // ── USER DATA ──────────────────────────────────────────────────────────
-    // UserPreferences.kt
-    fun saveUser(user: User) {
+    fun saveUser(user: AuthUser) {
         prefs.edit {
             val userJson = gson.toJson(user)
             putString(KEY_USER_DATA, userJson)
-            Log.d("UserPreferences", "User saved: $userJson")
+            // Clear guest mode when saving real user data
+            putBoolean(PREF_IS_GUEST, false)
+            Log.d("UserPreferences", "User saved: $userJson, guest mode cleared")
         }
     }
 
@@ -90,24 +99,17 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
         }
     }
 
-
-    // ── Login state (uses AuthRepository) ─────────────────────────────────
-    suspend fun isLoggedIn(): Boolean {
-        val hasToken = getAuthToken() != null
-        return if (hasToken) {
-            AuthRepository(context).verifyToken()   // <-- context is now available
-        } else {
-            false
-        }
-    }
-
     // ── Logout ───────────────────────────────────────────────────────────
-    fun clearAuth() =
+    fun clearAuth() {
         prefs.edit()
-            .remove("auth_token")
-            .remove("user_data")
+            .remove(KEY_AUTH_TOKEN)
+            .remove(KEY_PROVIDER_ID)
+            .remove(KEY_USER_DATA)
             .putBoolean("is_logged_in", false)
+            .putBoolean(PREF_IS_GUEST, false)
             .apply()
+        Log.d("UserPreferences", "Auth cleared")
+    }
 
     // ── Extra getters ────────────────────────────────────────────────────
     fun getFullName(): String = prefs.getString("full_name", "Player") ?: "Player"
@@ -116,12 +118,13 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
     fun getTotalStars(): Int = prefs.getInt("total_stars", 0)
 
     fun setSeenWelcome(seen: Boolean) {
-        prefs.edit().putBoolean("seen_welcome", seen).apply()
+        prefs.edit().putBoolean(KEY_SEEN_WELCOME, seen).apply()
     }
 
     fun getSeenWelcome(): Boolean {
-        return prefs.getBoolean("seen_welcome", false)
+        return prefs.getBoolean(KEY_SEEN_WELCOME, false)
     }
+
     // ── Save extra data when logging in ───────────────────────────────────
     fun saveUserData(name: String, email: String?, level: Int, stars: Int) {
         prefs.edit()
@@ -131,37 +134,55 @@ class UserPreferences(private val context: Context) {      // <-- keep it as a p
             .putInt("total_stars", stars)
             .apply()
     }
+
     fun saveFullName(name: String) {
         prefs.edit()
             .putString("full_name", name)
-
             .apply()
     }
-
 
     fun hasSeenWelcome(): Boolean {
         return prefs.getBoolean(KEY_SEEN_WELCOME, false)
     }
 
-
+    // ── GUEST MODE ────────────────────────────────────────────────────────
     fun clearGuestMode() {
-        // Clear any guest-specific data if needed
+        prefs.edit {
+            putBoolean(PREF_IS_GUEST, false)
+            Log.d("UserPreferences", "Guest mode cleared")
+        }
     }
-    private val PREF_HAS_SEEN_WELCOME = "has_seen_welcome"
-    private val PREF_IS_GUEST = "is_guest_mode"
-
-
 
     fun setGuestMode(isGuest: Boolean) {
         prefs.edit().putBoolean(PREF_IS_GUEST, isGuest).apply()
+        Log.d("UserPreferences", "Guest mode set to: $isGuest")
     }
 
-    fun isGuestMode(): Boolean = prefs.getBoolean(PREF_IS_GUEST, false)
+    fun isGuestMode(): Boolean {
+        val isGuest = prefs.getBoolean(PREF_IS_GUEST, false)
+        val hasToken = hasLocalToken()
 
+        // If we have a token, we're definitely not in guest mode
+        if (hasToken && isGuest) {
+            Log.w("UserPreferences", "Inconsistent state: has token but guest flag is true, clearing guest mode")
+            clearGuestMode()
+            return false
+        }
+
+        Log.d("UserPreferences", "Is guest mode: $isGuest, has token: $hasToken")
+        return isGuest
+    }
+
+    // Only level 1 is unlocked
+    fun getUnlockedLevels(): List<Int> {
+        return listOf(1)
+    }
 
     companion object {
         private const val KEY_AUTH_TOKEN = "auth_token"
+        private const val KEY_PROVIDER_ID = "provider_id"
         private const val KEY_USER_DATA = "user_data"
         private const val KEY_SEEN_WELCOME = "seen_welcome"
+        private const val PREF_IS_GUEST = "is_guest_mode"
     }
 }

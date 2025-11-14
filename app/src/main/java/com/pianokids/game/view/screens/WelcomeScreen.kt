@@ -252,7 +252,9 @@ fun WelcomeScreen(
             SettingsDialog(onDismiss = { showSettings = false })
         }
 
-        // Login Chooser
+        // Replace the Login Chooser dialog section in WelcomeScreen with this:
+
+// Login Chooser
         if (showLoginChooser) {
             AlertDialog(
                 onDismissRequest = { showLoginChooser = false },
@@ -272,8 +274,15 @@ fun WelcomeScreen(
                                             val result = authRepository.loginWithSocial(idToken, "google")
                                             isLoading = false
                                             result.onSuccess {
+                                                // ✅ NOTIFY VIEWMODEL TO REFRESH STATE (AWAIT IT)
+                                                authViewModel.onLoginSuccess()
+
                                                 userPrefs.setSeenWelcome(true)
+                                                userPrefs.clearGuestMode()
                                                 Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
+
+                                                // Small delay to ensure state propagates
+                                                kotlinx.coroutines.delay(200)
                                                 onNavigateToHome()
                                             }.onFailure {
                                                 Toast.makeText(context, "Login failed: ${it.message}", Toast.LENGTH_LONG).show()
@@ -305,6 +314,9 @@ fun WelcomeScreen(
                                                     val result = authRepository.loginWithSocial(accessToken, "facebook")
                                                     isLoading = false
                                                     result.onSuccess {
+                                                        // ✅ NOTIFY VIEWMODEL TO REFRESH STATE
+                                                        authViewModel.onLoginSuccess()
+
                                                         userPrefs.setSeenWelcome(true)
                                                         Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
                                                         onNavigateToHome()
@@ -334,6 +346,7 @@ fun WelcomeScreen(
                 containerColor = Color.White
             )
         }
+
     }
 }
 

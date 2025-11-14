@@ -1,4 +1,3 @@
-// MainActivity.kt
 package com.pianokids.game
 
 import android.content.Intent
@@ -25,12 +24,21 @@ import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.UserPreferences
 import com.pianokids.game.viewmodel.AuthViewModel
+import com.pianokids.game.data.repository.AuthRepository
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var socialLoginManager: SocialLoginManager
     private lateinit var userPrefs: UserPreferences
     private lateinit var authViewModel: AuthViewModel
+    private lateinit var authRepository: AuthRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,19 +47,17 @@ class MainActivity : ComponentActivity() {
 
         socialLoginManager = SocialLoginManager(this)
         userPrefs = UserPreferences(this)
+        authRepository = AuthRepository(this)
         authViewModel = AuthViewModel(application)
-
 
         SoundManager.init(this)
 
         // Initialize Facebook SDK without client token
         try {
-            // Initialize Facebook SDK with auto-log enabled (no client token needed)
-            FacebookSdk.setAutoLogAppEventsEnabled(false) // Disable auto events for now
+            FacebookSdk.setAutoLogAppEventsEnabled(false)
             FacebookSdk.sdkInitialize(applicationContext)
             FacebookSdk.setAdvertiserIDCollectionEnabled(false)
 
-            // For debugging
             if (BuildConfig.DEBUG) {
                 FacebookSdk.setIsDebugEnabled(true)
             }
@@ -59,27 +65,48 @@ class MainActivity : ComponentActivity() {
             Log.d("Facebook", "Facebook SDK initialized successfully")
         } catch (e: Exception) {
             Log.e("Facebook", "Facebook SDK initialization failed", e)
-            // Continue without Facebook if initialization fails
         }
 
         setContent {
             PianoKidsGameTheme {
                 val navController = rememberNavController()
 
-                // Background to avoid white flash
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    // ── DETERMINE START DESTINATION ───────────────────────
                     val hasSeenWelcome = userPrefs.hasSeenWelcome()
-                    val isLoggedIn = userPrefs.hasLocalToken()  // Fast local check
+                    var startDestination by remember { mutableStateOf("welcome") }
 
-                    val startDestination = when {
-                        !hasSeenWelcome -> "welcome"
-                        isLoggedIn -> "home"
-                        else -> "welcome"  // First time or guest → show Welcome
+                    LaunchedEffect(Unit) {
+                        // Check if user is logged in
+                        val hasToken = userPrefs.hasLocalToken()
+                        val isLoggedIn = if (hasToken) {
+                            authRepository.verifyToken()
+                        } else {
+                            false
+                        }
+
+                        // Debug logging
+                        Log.d("MainActivity", "Has seen welcome: $hasSeenWelcome")
+                        Log.d("MainActivity", "Has token: $hasToken")
+                        Log.d("MainActivity", "Is logged in: $isLoggedIn")
+                        Log.d("MainActivity", "Is guest mode: ${userPrefs.isGuestMode()}")
+
+                        startDestination = when {
+                            !hasSeenWelcome -> "welcome"
+                            isLoggedIn -> {
+                                // Make sure guest mode is cleared if we're logged in
+                                userPrefs.clearGuestMode()
+                                "home"
+                            }
+                            else -> "welcome"
+                        }
+
+                        navController.navigate(startDestination) {
+                            popUpTo(0) { inclusive = true }
+                        }
                     }
 
                     NavHost(navController = navController, startDestination = startDestination) {
@@ -87,7 +114,7 @@ class MainActivity : ComponentActivity() {
                             WelcomeScreen(
                                 onNavigateToHome = {
                                     userPrefs.setSeenWelcome(true)
-                                    userPrefs.clearGuestMode()  // Ensure clean state
+                                    userPrefs.clearGuestMode()
                                     navController.navigate("home") {
                                         popUpTo("welcome") { inclusive = true }
                                     }
@@ -118,18 +145,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
         if (BuildConfig.DEBUG) {
             FacebookSdk.setIsDebugEnabled(true)
             FacebookSdk.addLoggingBehavior(com.facebook.LoggingBehavior.INCLUDE_ACCESS_TOKENS)
         }
-
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        // Handle Facebook login result
         socialLoginManager.handleFacebookResult(requestCode, resultCode, data)
     }
 }
-
-
