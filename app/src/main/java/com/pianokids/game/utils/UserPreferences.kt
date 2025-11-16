@@ -178,11 +178,31 @@ class UserPreferences(private val context: Context) {
         return listOf(1)
     }
 
+    // ── AVATAR THUMBNAIL ─────────────────────────────────────────────────
+    fun saveAvatarThumbnail(url: String) {
+        prefs.edit {
+            putString(KEY_AVATAR_THUMBNAIL, url)
+            Log.d("UserPreferences", "Avatar thumbnail saved: $url")
+        }
+    }
+
+    fun getAvatarThumbnail(): String? {
+        return prefs.getString(KEY_AVATAR_THUMBNAIL, null)
+    }
+
+    fun clearAvatarThumbnail() {
+        prefs.edit {
+            remove(KEY_AVATAR_THUMBNAIL)
+            Log.d("UserPreferences", "Avatar thumbnail cleared")
+        }
+    }
+
     companion object {
         private const val KEY_AUTH_TOKEN = "auth_token"
         private const val KEY_PROVIDER_ID = "provider_id"
         private const val KEY_USER_DATA = "user_data"
         private const val KEY_SEEN_WELCOME = "seen_welcome"
         private const val PREF_IS_GUEST = "is_guest_mode"
+        private const val KEY_AVATAR_THUMBNAIL = "avatar_thumbnail"
     }
 }
