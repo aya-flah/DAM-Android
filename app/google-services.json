@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "151121581529",
+    "project_id": "pianokids-project",
+    "storage_bucket": "pianokids-project.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:151121581529:android:6918ea1dce04903d215e004c",
+        "android_client_info": {
+          "package_name": "com.pianokids.game"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "151121581529-9fa29qlmv5bacqrqinm0od67t4v32tbj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBfIx8WZ8z3a9c7e1f2g3h4i5j6k7l8m9n"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "151121581529-9fa29qlmv5bacqrqinm0od67t4v32tbj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

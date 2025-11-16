@@ -36,6 +36,11 @@ import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.UserPreferences
 import com.pianokids.game.viewmodel.AuthViewModel
+import com.pianokids.game.viewmodel.AvatarViewModel
+import com.pianokids.game.utils.components.AvatarsSection
+import com.pianokids.game.utils.components.AvatarCreationDialog
+import com.pianokids.game.utils.components.AvatarDetailDialog
+import com.pianokids.game.utils.components.AvatarImageView
 
 @Composable
 fun ProfileScreen(
@@ -50,9 +55,33 @@ fun ProfileScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showCreateAvatarDialog by remember { mutableStateOf(false) }
+    var showAvatarDetailDialog by remember { mutableStateOf(false) }
 
     val authViewModel: AuthViewModel = viewModel()
+    val avatarViewModel: AvatarViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+
+    // Avatar states
+    val avatars by avatarViewModel.avatars.collectAsState()
+    val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
+    val isLoadingAvatars by avatarViewModel.isLoading.collectAsState()
+    val avatarError by avatarViewModel.error.collectAsState()
+
+    // Load avatars when logged in
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) {
+            avatarViewModel.loadUserAvatars()
+        }
+    }
+
+    // Show error if any
+    LaunchedEffect(avatarError) {
+        avatarError?.let { error ->
+            // You can show a snackbar or toast here
+            avatarViewModel.clearError()
+        }
+    }
 
     // ✅ UTILISE LE STATEFLOW POUR LE NOM
     val userName by authViewModel.userName.collectAsState()
@@ -106,7 +135,7 @@ fun ProfileScreen(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Back button & Settings button
+            // Back button & Settings button & Logout button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -129,33 +158,79 @@ fun ProfileScreen(
                     )
                 }
 
-                IconButton(
-                    onClick = {
-                        SoundManager.playClick()
-                        showSettingsDialog = true
-                    },
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.3f))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        tint = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
+                    IconButton(
+                        onClick = {
+                            SoundManager.playClick()
+                            showSettingsDialog = true
+                        },
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    if (isLoggedIn) {
+                        IconButton(
+                            onClick = {
+                                SoundManager.playClick()
+                                showLogoutDialog = true
+                            },
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(RainbowRed.copy(alpha = 0.8f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ExitToApp,
+                                contentDescription = "Logout",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    }
                 }
             }
 
             Spacer(Modifier.height(16.dp))
 
-            // Avatar
-            AnimatedProfileAvatar(
-                userName = userName,
-                userPhotoUrl = userPhotoUrl,
-                userProvider = userProvider
-            )
+            // Avatar - clickable to show bigger version
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clickable {
+                        SoundManager.playClick()
+                        showAvatarDetailDialog = true
+                    }
+            ) {
+                // Priority: Active avatar's Ready Player Me URL > UserPrefs > Profile photo
+                val avatarUrl = activeAvatar?.avatarImageUrl
+                    ?: userPrefs.getAvatarThumbnail()
+                
+                if (avatarUrl != null && avatarUrl.isNotEmpty()) {
+                    AvatarImageView(
+                        avatarUrl = avatarUrl,
+                        size = 120,
+                        borderColor = RainbowBlue,
+                        borderWidth = 4
+                    )
+                } else {
+                    AnimatedProfileAvatar(
+                        userName = userName,
+                        userPhotoUrl = userPhotoUrl,
+                        userProvider = userProvider
+                    )
+                }
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -354,31 +429,35 @@ fun ProfileScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // Logout Button
+            // ──────────────────────────────────────────────
+            // Avatars Section (only for logged in users)
+            // ──────────────────────────────────────────────
             if (isLoggedIn) {
-                Button(
-                    onClick = {
+                AvatarsSection(
+                    avatars = avatars,
+                    activeAvatar = activeAvatar,
+                    isLoading = isLoadingAvatars,
+                    onCreateAvatar = {
                         SoundManager.playClick()
-                        showLogoutDialog = true
+                        showCreateAvatarDialog = true
+                    },
+                    onSelectAvatar = { avatar ->
+                        SoundManager.playClick()
+                        avatarViewModel.setActiveAvatar(avatar.id)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(60.dp),
-                    shape = RoundedCornerShape(30.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = RainbowRed),
-                    elevation = ButtonDefaults.buttonElevation(8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.ExitToApp,
-                        contentDescription = "Logout",
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text("Logout", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                }
+                        .background(
+                            Color.White.copy(alpha = 0.15f),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(20.dp)
+                )
+                
+                Spacer(Modifier.height(16.dp))
             }
 
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(16.dp))
         }
 
         // ✅ Edit Name Dialog - NOTIFIE LE VIEWMODEL
@@ -400,6 +479,27 @@ fun ProfileScreen(
 
         if (showSettingsDialog) {
             SettingsDialog(onDismiss = { showSettingsDialog = false })
+        }
+        
+        // Avatar Creation Dialog
+        if (showCreateAvatarDialog) {
+            AvatarCreationDialog(
+                onDismiss = { 
+                    showCreateAvatarDialog = false
+                },
+                onCreateAvatar = { name, avatarImageUrl ->
+                    avatarViewModel.createAvatar(name, avatarImageUrl)
+                    showCreateAvatarDialog = false
+                }
+            )
+        }
+        
+        // Avatar Detail Dialog
+        if (showAvatarDetailDialog) {
+            AvatarDetailDialog(
+                avatar = activeAvatar,
+                onDismiss = { showAvatarDetailDialog = false }
+            )
         }
 
         // Logout Dialog

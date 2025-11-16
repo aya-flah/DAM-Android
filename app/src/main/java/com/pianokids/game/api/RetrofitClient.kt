@@ -1,6 +1,7 @@
 
 package com.pianokids.game.data.api
 
+import com.pianokids.game.api.AvatarApiService
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -24,4 +25,5 @@ object RetrofitClient {
         .build()
 
     val authApi: AuthApiService = retrofit.create(AuthApiService::class.java)
+    val avatarApi: AvatarApiService = retrofit.create(AvatarApiService::class.java)
 }

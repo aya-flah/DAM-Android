@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
@@ -38,6 +39,8 @@ import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.UserPreferences
 import com.pianokids.game.viewmodel.AuthViewModel
+import com.pianokids.game.viewmodel.AvatarViewModel
+import com.pianokids.game.utils.components.AvatarCreationDialog
 import kotlinx.coroutines.launch
 import kotlin.math.sin
 
@@ -91,11 +94,13 @@ fun HomeScreen(
     var showComingSoonDialog by remember { mutableStateOf(false) }
     var showGuestLimitDialog by remember { mutableStateOf(false) }
     var showLoginDialog by remember { mutableStateOf(false) }
+    var showCreateAvatarDialog by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
     val verticalScrollState = rememberScrollState()
     val authViewModel: AuthViewModel = viewModel()
+    val avatarViewModel: AvatarViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val userName by authViewModel.userName.collectAsState()
     val user = userPrefs.getUser()
@@ -238,7 +243,10 @@ fun HomeScreen(
                 maxStars = levels.size * 3,
                 isLoggedIn = isLoggedIn,
                 onBackClick = onNavigateBack,
-                onProfileClick = onNavigateToProfile
+                onProfileClick = onNavigateToProfile,
+                onAddAvatarClick = if (isLoggedIn) {
+                    { showCreateAvatarDialog = true }
+                } else null
             )
 
             // 4. 2D SCROLLABLE MAP
@@ -328,6 +336,19 @@ fun HomeScreen(
                             onFailure = { isLoading = false }
                         )
                     }
+                }
+            )
+        }
+        
+        // Avatar Creation Dialog
+        if (showCreateAvatarDialog) {
+            AvatarCreationDialog(
+                onDismiss = { 
+                    showCreateAvatarDialog = false
+                },
+                onCreateAvatar = { name, avatarImageUrl ->
+                    avatarViewModel.createAvatar(name, avatarImageUrl)
+                    showCreateAvatarDialog = false
                 }
             )
         }
@@ -641,7 +662,8 @@ fun CompactGameHeader(
     maxStars: Int,
     isLoggedIn: Boolean,
     onBackClick: () -> Unit,
-    onProfileClick: () -> Unit
+    onProfileClick: () -> Unit,
+    onAddAvatarClick: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier
@@ -723,26 +745,53 @@ fun CompactGameHeader(
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(RainbowYellow.copy(alpha = 0.2f))
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = "Stars",
-                    tint = RainbowYellow,
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = "$totalStars/$maxStars",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = RainbowOrange
+                // Add Avatar Button (only for logged in users)
+                if (isLoggedIn && onAddAvatarClick != null) {
+                    IconButton(
+                        onClick = { 
+                            SoundManager.playClick()
+                            onAddAvatarClick()
+                        },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(RainbowBlue.copy(alpha = 0.2f))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Avatar",
+                            tint = RainbowBlue,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                
+                // Stars Display
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(RainbowYellow.copy(alpha = 0.2f))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = "Stars",
+                        tint = RainbowYellow,
+                        modifier = Modifier.size(20.dp)
                     )
-                )
+                    Text(
+                        text = "$totalStars/$maxStars",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = RainbowOrange
+                        )
+                    )
+                }
             }
         }
     }
