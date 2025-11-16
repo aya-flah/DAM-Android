@@ -33,7 +33,7 @@ class SocialLoginManager(private val context: Context) {
     init {
         // FIXED Google client ID - remove duplicates
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestIdToken("151121581529-gqde01diq4oij813nqtj3ob1ukreodk5.apps.googleusercontent.com")
+            .requestIdToken("24237641156-i9auj11eib39mmuv76vg3jpd3a4enfd5.apps.googleusercontent.com")
             .requestEmail()
             .build()
 

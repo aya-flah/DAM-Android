@@ -32,6 +32,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import com.pianokids.game.view.screens.levels.LevelScreen
+
 
 class MainActivity : ComponentActivity() {
 
@@ -125,7 +127,10 @@ class MainActivity : ComponentActivity() {
                         composable("home") {
                             HomeScreen(
                                 onNavigateToProfile = { navController.navigate("profile") },
-                                onNavigateToAuth = { navController.navigate("welcome") }
+                                onNavigateToAuth = { navController.navigate("welcome") },
+                                onNavigateToLevel = { levelId, userId ->
+                                    navController.navigate("level/$levelId/$userId")
+                                }
                             )
                         }
 
@@ -139,6 +144,17 @@ class MainActivity : ComponentActivity() {
                                         popUpTo(0) { inclusive = true }
                                     }
                                 }
+                            )
+                        }
+
+                        composable("level/{levelId}/{userId}") { backStackEntry ->
+                            val levelId = backStackEntry.arguments?.getString("levelId") ?: return@composable
+                            val userId = backStackEntry.arguments?.getString("userId") ?: "guest"
+
+                            LevelScreen(
+                                userId = userId,
+                                levelId = levelId,
+                                onExit = { navController.popBackStack() }
                             )
                         }
                     }

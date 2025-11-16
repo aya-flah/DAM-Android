@@ -26,13 +26,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.*
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.pianokids.game.R
+import com.pianokids.game.data.models.Level
+import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.ui.theme.*
 import com.pianokids.game.utils.SocialLoginManager
@@ -44,23 +45,7 @@ import com.pianokids.game.utils.components.AvatarCreationDialog
 import kotlinx.coroutines.launch
 import kotlin.math.sin
 
-data class GameLevel(
-    val number: Int,
-    val title: String,
-    val world: String,
-    val isUnlocked: Boolean,
-    val stars: Int,
-    val emoji: String,
-    val color: Color,
-    val position: IslandPosition,
-    val landImageRes: Int
-)
-
-data class IslandPosition(
-    val x: Float, // 0..1 across map
-    val y: Float  // 0..1 down map
-)
-
+// ---- Ocean Clouds Data ----
 data class Cloud(
     val id: Int,
     var x: Float,
@@ -82,13 +67,15 @@ data class Bird(
 fun HomeScreen(
     onNavigateToProfile: () -> Unit = {},
     onNavigateToAuth: () -> Unit = {},
-    onNavigateBack: () -> Unit = {}
+    onNavigateBack: () -> Unit = {},
+    onNavigateToLevel: (String, String) -> Unit
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
     val userPrefs = remember { UserPreferences(context) }
     val authRepository = remember { AuthRepository(context) }
     val socialLoginManager = remember { SocialLoginManager(context) }
+    val levelRepository = remember { LevelRepository() }
     val scope = rememberCoroutineScope()
 
     var showComingSoonDialog by remember { mutableStateOf(false) }
@@ -99,108 +86,57 @@ fun HomeScreen(
 
     val scrollState = rememberScrollState()
     val verticalScrollState = rememberScrollState()
+
     val authViewModel: AuthViewModel = viewModel()
     val avatarViewModel: AvatarViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val userName by authViewModel.userName.collectAsState()
     val user = userPrefs.getUser()
 
-    val userPhotoUrl = user?.photoUrl
-    val totalStars = when {
-        user != null -> user.score / 100
-        isLoggedIn -> userPrefs.getTotalStars()
-        else -> 0
-    }
+    val userId = user?.id ?: "guest"
+    val isGuest = userPrefs.isGuestMode()
 
+    val userPhotoUrl = user?.photoUrl
+
+    var levels by remember { mutableStateOf<List<Level>>(emptyList()) }
+    var unlockedMap by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+    val totalStars = user?.score ?: 0
+
+    // Animation offsets
     var waveOffset by remember { mutableStateOf(0f) }
     var cloudOffset by remember { mutableStateOf(0f) }
-    var birdOffset by remember { mutableStateOf(0f) }
-    var islandFloat by remember { mutableStateOf(0f) }
+    var floatOffset by remember { mutableStateOf(0f) }
 
     LaunchedEffect(Unit) {
+        SoundManager.startBackgroundMusic()
         while (true) {
             waveOffset += 0.5f
             cloudOffset += 0.3f
-            birdOffset += 0.8f
-            islandFloat += 0.05f
+            floatOffset += 0.05f
             kotlinx.coroutines.delay(50)
         }
     }
-// In HomeScreen, replace the levels definition with this:
 
-    val levels = remember(isLoggedIn, user) {
-        // Get the user's unlocked levels (only level 1 for now)
-        val unlockedLevels = userPrefs.getUnlockedLevels() // Returns listOf(1)
+    // ----- LOAD LEVELS FROM BACKEND -----
+    LaunchedEffect(isLoggedIn) {
+        isLoading = true
 
-        listOf(
-            GameLevel(
-                number = 1,
-                title = "Gotham Nights",
-                world = "Dark Knight City",
-                isUnlocked = true, // Level 1 is always unlocked for everyone
-                stars = 3,
-                emoji = "🦇",
-                color = Color(0xFF1A1A1A),
-                position = IslandPosition(0.15f, 0.30f),
-                landImageRes = R.drawable.level_1
-            ),
-            GameLevel(
-                number = 2,
-                title = "Web of Justice",
-                world = "Hero's Landing",
-                isUnlocked = unlockedLevels.contains(2), // Unlocked only if in user's progress
-                stars = 2,
-                emoji = "🕷️",
-                color = RainbowRed,
-                position = IslandPosition(0.32f, 0.48f),
-                landImageRes = R.drawable.level_2
-            ),
-            GameLevel(
-                number = 3,
-                title = "Moonlight Magic",
-                world = "Crystal Kingdom",
-                isUnlocked = unlockedLevels.contains(3),
-                stars = 1,
-                emoji = "🌙",
-                color = RainbowPink,
-                position = IslandPosition(0.48f, 0.28f),
-                landImageRes = R.drawable.level_3
-            ),
-            GameLevel(
-                number = 6,
-                title = "Electric Meadow",
-                world = "Pokémon Plains",
-                isUnlocked = unlockedLevels.contains(6),
-                stars = 0,
-                emoji = "⚡",
-                color = RainbowYellow,
-                position = IslandPosition(0.18f, 0.65f),
-                landImageRes = R.drawable.level_4
-            ),
-            GameLevel(
-                number = 5,
-                title = "Shield of Justice",
-                world = "Avengers Base",
-                isUnlocked = unlockedLevels.contains(5),
-                stars = 0,
-                emoji = "🛡️",
-                color = RainbowBlue,
-                position = IslandPosition(0.55f, 0.63f),
-                landImageRes = R.drawable.level_5
-            ),
-            GameLevel(
-                number = 4,
-                title = "Hidden Village",
-                world = "Ninja Path",
-                isUnlocked = unlockedLevels.contains(4),
-                stars = 0,
-                emoji = "🥷",
-                color = RainbowIndigo,
-                position = IslandPosition(0.76f, 0.42f),
-                landImageRes = R.drawable.level_6
-            )
-        )
+        val allLevels = levelRepository.getAllLevels() ?: emptyList()
+        levels = allLevels.sortedBy { it.order }
+
+        // Unlocking logic
+        unlockedMap =
+            if (isLoggedIn && userId != "guest") {
+                val response = levelRepository.getUnlockedLevels(userId)
+                response?.levels?.associate { it.levelId to it.unlocked } ?: emptyMap()
+            } else {
+                allLevels.firstOrNull()?.let { lvl -> mapOf(lvl._id to true) } ?: emptyMap()
+            }
+
+        isLoading = false
     }
+
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -208,10 +144,6 @@ fun HomeScreen(
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             socialLoginManager.handleGoogleSignInResult(task)
         }
-    }
-
-    LaunchedEffect(Unit) {
-        SoundManager.startBackgroundMusic()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -222,12 +154,15 @@ fun HomeScreen(
             birdOffset = birdOffset
         )
 
-        // 2. LOADING
+        // Background ocean
+        OceanMapBackground(waveOffset = waveOffset, cloudOffset = cloudOffset)
+
+        // Loading overlay
         if (isLoading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f)),
+                    .background(Color.Black.copy(alpha = 0.3f)),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(color = RainbowYellow)
@@ -235,7 +170,8 @@ fun HomeScreen(
         }
 
         Column(modifier = Modifier.fillMaxSize()) {
-            // 3. HEADER
+
+            // ---- HEADER ----
             CompactGameHeader(
                 userName = userName,
                 userPhotoUrl = userPhotoUrl,
@@ -249,7 +185,7 @@ fun HomeScreen(
                 } else null
             )
 
-            // 4. 2D SCROLLABLE MAP
+            // ---- MAP ----
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -262,18 +198,27 @@ fun HomeScreen(
                         .width(2800.dp)
                         .height(1800.dp)
                 ) {
-                    // 5. ANIMATED ISLANDS ON MAP
                     levels.forEach { level ->
+
+                        val isUnlocked = unlockedMap[level._id] == true
+
                         MapIsland(
                             level = level,
-                            mapWidth = 1600.dp,
-                            mapHeight = 1400.dp,
-                            floatOffset = islandFloat,
+                            isUnlocked = isUnlocked,
+                            floatOffset = floatOffset,
                             onClick = {
-                                if (level.isUnlocked) {
-                                    showComingSoonDialog = true
-                                } else {
-                                    showGuestLimitDialog = true
+                                SoundManager.playClick()
+
+                                when {
+                                    isGuest && level.order != 1 -> {
+                                        showGuestLimitDialog = true
+                                    }
+                                    !isUnlocked -> {
+                                        showComingSoonDialog = true
+                                    }
+                                    else -> {
+                                        onNavigateToLevel(level._id, userId)
+                                    }
                                 }
                                 SoundManager.playClick()
                             }
@@ -283,32 +228,21 @@ fun HomeScreen(
             }
         }
 
-        // DIALOGS
-        if (showComingSoonDialog) {
-            ComingSoonDialog { showComingSoonDialog = false }
-        }
-        if (showGuestLimitDialog) {
-            GuestLimitDialog(
-                onDismiss = { showGuestLimitDialog = false },
-                onLoginClick = { showGuestLimitDialog = false; showLoginDialog = true }
-            )
-        }
+        // ---- DIALOGS ----
         if (showLoginDialog) {
             LoginChooserDialog(
                 onDismiss = { showLoginDialog = false },
-                // In HomeScreen, update the login callbacks:
-
-// For Google login:
                 onGoogleClick = {
                     isLoading = true
                     socialLoginManager.signInWithGoogle(
                         launcher = googleSignInLauncher,
                         onSuccess = { idToken ->
                             scope.launch {
-                                val result = authRepository.loginWithSocial(token = idToken, provider = "google")
+                                val result =
+                                    authRepository.loginWithSocial(token = idToken, provider = "google")
                                 isLoading = false
                                 result.onSuccess {
-                                    authViewModel.onLoginSuccess() // ✅ ADD THIS
+                                    authViewModel.onLoginSuccess()
                                     showLoginDialog = false
                                 }
                             }
@@ -325,10 +259,13 @@ fun HomeScreen(
                             activity = act,
                             onSuccess = { accessToken ->
                                 scope.launch {
-                                    val result = authRepository.loginWithSocial(token = accessToken, provider = "facebook")
+                                    val result = authRepository.loginWithSocial(
+                                        token = accessToken,
+                                        provider = "facebook"
+                                    )
                                     isLoading = false
                                     result.onSuccess {
-                                        authViewModel.onLoginSuccess() // ✅ ADD THIS
+                                        authViewModel.onLoginSuccess()
                                         showLoginDialog = false
                                     }
                                 }
@@ -339,11 +276,25 @@ fun HomeScreen(
                 }
             )
         }
-        
+
+        if (showGuestLimitDialog) {
+            GuestLimitDialog(
+                onDismiss = { showGuestLimitDialog = false },
+                onLoginClick = {
+                    showGuestLimitDialog = false
+                    showLoginDialog = true
+                }
+            )
+        }
+
+        if (showComingSoonDialog) {
+            ComingSoonDialog { showComingSoonDialog = false }
+        }
+
         // Avatar Creation Dialog
         if (showCreateAvatarDialog) {
             AvatarCreationDialog(
-                onDismiss = { 
+                onDismiss = {
                     showCreateAvatarDialog = false
                 },
                 onCreateAvatar = { name, avatarImageUrl ->
@@ -356,304 +307,146 @@ fun HomeScreen(
 }
 
 
+    }
+}
+
+// -------------------------------------------------------------
+// MAP ISLAND
+// -------------------------------------------------------------
 @Composable
 fun MapIsland(
-    level: GameLevel,
-    mapWidth: androidx.compose.ui.unit.Dp,
-    mapHeight: androidx.compose.ui.unit.Dp,
+    level: Level,
+    isUnlocked: Boolean,
     floatOffset: Float,
     onClick: () -> Unit
 ) {
-    // Calculate floating animation
-    val floatY = sin(floatOffset + level.number * 0.5) * 8f
+    val pos = level.mapPosition
+    val floatY = sin(floatOffset + level.order * 0.5) * 8f
 
     Box(
         modifier = Modifier
             .offset(
-                x = (level.position.x * mapWidth.value).dp,
-                y = (level.position.y * mapHeight.value + floatY).dp
+                x = (pos.x * 1600f).dp,
+                y = (pos.y * 1400f + floatY).dp
             )
-            .size(400.dp)
-            .zIndex(level.number.toFloat()),
+            .size(350.dp)
+            .zIndex(level.order.toFloat()),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // LEVEL CARD
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+            // -------- LEVEL CARD --------
             Card(
                 modifier = Modifier
-                    .width(160.dp)
-                    .height(140.dp)
+                    .width(150.dp)
+                    .height(130.dp)
                     .clickable(onClick = onClick),
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (level.isUnlocked) Color.White else Color(0xFFE0E0E0)
+                    containerColor = if (isUnlocked) Color.White else Color(0xFFE0E0E0)
                 ),
-                elevation = CardDefaults.cardElevation(
-                    defaultElevation = if (level.isUnlocked) 10.dp else 4.dp
-                ),
-                border = BorderStroke(
-                    width = 3.dp,
-                    color = if (level.isUnlocked) level.color else Color.Gray.copy(alpha = 0.3f)
-                )
+                elevation = CardDefaults.cardElevation(6.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            if (level.isUnlocked) {
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color.White,
-                                        level.color.copy(alpha = 0.05f)
-                                    )
-                                )
-                            } else {
-                                Brush.verticalGradient(
-                                    listOf(
-                                        Color(0xFFF5F5F5),
-                                        Color(0xFFEEEEEE)
-                                    )
-                                )
-                            }
-                        )
-                        .padding(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Emoji/Lock icon
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (level.isUnlocked) level.color.copy(alpha = 0.15f)
-                                else Color.Gray.copy(alpha = 0.2f)
-                            )
-                            .border(3.dp, level.color.copy(alpha = if (level.isUnlocked) 1f else 0.3f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (level.isUnlocked) {
-                            Text(text = level.emoji, fontSize = 28.sp)
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = "Locked",
-                                tint = Color.Gray,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+
+                    if (!isUnlocked) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Gray)
+                    } else {
+                        Text("🎵", fontSize = 26.sp)
                     }
 
-                    // Level number
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(level.color.copy(alpha = if (level.isUnlocked) 1f else 0.3f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${level.number}",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 20.sp,
-                                color = Color.White
-                            )
-                        )
-                    }
+                    Spacer(Modifier.height(4.dp))
 
                     // Level title
                     Text(
                         text = level.title,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (level.isUnlocked) Color.Black else Color.Gray
-                        ),
                         textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        lineHeight = 11.sp
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2
                     )
 
-                    // Stars
-                    if (level.isUnlocked) {
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                    Spacer(Modifier.height(4.dp))
+
+                    if (isUnlocked) {
+                        Row {
                             repeat(3) { i ->
                                 Icon(
-                                    imageVector = Icons.Default.Star,
-                                    contentDescription = "Star ${i + 1}",
-                                    tint = if (i < level.stars) RainbowYellow else Color.LightGray,
-                                    modifier = Modifier.size(16.dp)
+                                    Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = if (i < level.starsUnlocked) RainbowYellow else Color.LightGray,
+                                    modifier = Modifier.size(14.dp)
                                 )
                             }
                         }
                     } else {
-                        Text(
-                            text = "Locked",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 9.sp,
-                                color = Color.Gray,
-                                fontWeight = FontWeight.Bold
-                            )
-                        )
+                        Text("Locked", fontSize = 9.sp, color = Color.Gray)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(Modifier.height(6.dp))
 
-            // LAND IMAGE with subtle shadow
-            Box(
-                modifier = Modifier.size(300.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                // Shadow
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawOval(
-                        color = Color.Black.copy(alpha = 0.2f),
-                        topLeft = Offset(size.width * 0.2f, size.height * 0.85f),
-                        size = androidx.compose.ui.geometry.Size(size.width * 0.6f, size.height * 0.1f)
-                    )
-                }
-
-                // Island image
-                Image(
-                    painter = painterResource(id = level.landImageRes),
-                    contentDescription = "Island ${level.number}",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                    alpha = if (level.isUnlocked) 1f else 0.6f
-                )
-            }
+            // -------- ISLAND IMAGE FROM BACKEND --------
+            AsyncImage(
+                model = level.islandImageUrl,
+                contentDescription = "Island ${level.title}",
+                modifier = Modifier.size(280.dp),
+                contentScale = ContentScale.Fit,
+                alpha = if (isUnlocked) 1f else 0.5f
+            )
         }
     }
 }
 
-// OCEAN with sea.png background, animated waves, clouds, and birds
+// -------------------------------------------------------------
+// BACKGROUND
+// -------------------------------------------------------------
 @Composable
-fun OceanMapBackground(
-    waveOffset: Float,
-    cloudOffset: Float,
-    birdOffset: Float
-) {
-    // Initialize clouds
-    val clouds = remember {
-        listOf(
-            Cloud(1, -200f, 100f, 120f, 1.2f, 0.7f),
-            Cloud(2, 300f, 180f, 150f, 0.8f, 0.6f),
-            Cloud(3, 800f, 80f, 100f, 1.5f, 0.8f),
-            Cloud(4, 1200f, 220f, 130f, 1.0f, 0.65f),
-            Cloud(5, 1600f, 140f, 140f, 0.9f, 0.75f),
-            Cloud(6, 2000f, 190f, 110f, 1.3f, 0.7f)
-        )
-    }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Background image (sea.png)
-        Image(
-            painter = painterResource(id = R.drawable.sea),
-            contentDescription = "Ocean Background",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
-        // Canvas for waves, clouds, and birds
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
-
-            // DRAW CLOUDS
-            clouds.forEach { cloud ->
-                val cloudX = (cloud.x + cloudOffset * cloud.speed) % (width + 400f) - 200f
-
-                // Draw cloud using circles
-                val cloudColor = Color.White.copy(alpha = cloud.alpha)
-
-                // Main cloud body (3 overlapping circles)
-                drawCircle(
-                    color = cloudColor,
-                    radius = cloud.size * 0.5f,
-                    center = Offset(cloudX, cloud.y)
-                )
-                drawCircle(
-                    color = cloudColor,
-                    radius = cloud.size * 0.6f,
-                    center = Offset(cloudX + cloud.size * 0.4f, cloud.y)
-                )
-                drawCircle(
-                    color = cloudColor,
-                    radius = cloud.size * 0.55f,
-                    center = Offset(cloudX + cloud.size * 0.8f, cloud.y + cloud.size * 0.1f)
-                )
-                drawCircle(
-                    color = cloudColor,
-                    radius = cloud.size * 0.45f,
-                    center = Offset(cloudX - cloud.size * 0.3f, cloud.y + cloud.size * 0.15f)
-                )
-            }
-
-
-
-            // ANIMATED WAVES
-            val waveCount = 8
-            val baseWaveHeight = 15f
-            val waveLength = width / 3f
-
-            for (i in 0 until waveCount) {
-                val yOffset = height * 0.3f + i * 60f
-                val phase = waveOffset + i * 0.5f
-                val waveHeight = baseWaveHeight * (1f - i * 0.06f)
-
-                val path = Path().apply {
-                    var x = -waveLength
-                    moveTo(x, yOffset)
-
-                    while (x < width + waveLength) {
-                        val angle = (x + phase * 10f) / waveLength * Math.PI * 2
-                        val y = yOffset + waveHeight * sin(angle).toFloat()
-                        lineTo(x, y)
-                        x += 10f
-                    }
-
-                    lineTo(width + waveLength, height)
-                    lineTo(-waveLength, height)
-                    close()
-                }
-
-                // Subtle wave overlay
-                drawPath(
-                    path = path,
-                    color = Color.White.copy(alpha = 0.08f - i * 0.008f)
-                )
-
-                // Wave highlights
-                if (i % 2 == 0) {
-                    drawPath(
-                        path = path,
-                        color = Color.White.copy(alpha = 0.15f - i * 0.015f),
-                        style = Stroke(width = 1.5f)
-                    )
-                }
-            }
-        }
-    }
+fun OceanMapBackground(waveOffset: Float, cloudOffset: Float) {
+    Image(
+        painter = painterResource(R.drawable.sea),
+        contentDescription = null,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop
+    )
 }
 
+// -------------------------------------------------------------
+// DIALOGS (unchanged)
+// -------------------------------------------------------------
+@Composable
+fun ComingSoonDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Level Locked", fontWeight = FontWeight.Bold) },
+        text = { Text("Complete previous levels to unlock this one!") },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("OK") }
+        }
+    )
+}
 
+@Composable
+fun GuestLimitDialog(onDismiss: () -> Unit, onLoginClick: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Login required") },
+        text = { Text("Guests can only play Level 1.") },
+        confirmButton = {
+            Button(onClick = onLoginClick) { Text("Login") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
 
-
-
-
-
-
-
-// Compact game header
 @Composable
 fun CompactGameHeader(
     userName: String,
@@ -750,7 +543,7 @@ fun CompactGameHeader(
                 // Add Avatar Button (only for logged in users)
                 if (isLoggedIn && onAddAvatarClick != null) {
                     IconButton(
-                        onClick = { 
+                        onClick = {
                             SoundManager.playClick()
                             onAddAvatarClick()
                         },
@@ -767,7 +560,7 @@ fun CompactGameHeader(
                         )
                     }
                 }
-                
+
                 // Stars Display
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -795,82 +588,4 @@ fun CompactGameHeader(
             }
         }
     }
-}
-
-@Composable
-fun ComingSoonDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Text(text = "🎵", fontSize = 64.sp) },
-        title = {
-            Text(
-                text = "Coming Soon!",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 32.sp,
-                    color = RainbowBlue
-                ),
-                textAlign = TextAlign.Center
-            )
-        },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("This level is under construction!", fontSize = 20.sp, textAlign = TextAlign.Center)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("We're working hard to bring you an amazing piano experience! ✨", fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center)
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { SoundManager.playClick(); onDismiss() },
-                colors = ButtonDefaults.buttonColors(containerColor = RainbowBlue),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Got it!", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            }
-        },
-        containerColor = Color.White,
-        shape = RoundedCornerShape(28.dp)
-    )
-}
-@Composable
-fun GuestLimitDialog(onDismiss: () -> Unit, onLoginClick: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = { Text(text = "🔒", fontSize = 64.sp) },
-        title = {
-            Text(
-                text = "Login Required",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 32.sp,
-                    color = RainbowOrange
-                ),
-                textAlign = TextAlign.Center
-            )
-        },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("This level is locked for guests!", fontSize = 20.sp, textAlign = TextAlign.Center)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Login to unlock all levels and save your progress! 🎮", fontSize = 16.sp, color = Color.Gray, textAlign = TextAlign.Center)
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { SoundManager.playClick(); onLoginClick() },
-                colors = ButtonDefaults.buttonColors(containerColor = RainbowBlue),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Login Now", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = { SoundManager.playClick(); onDismiss() }) {
-                Text("Maybe Later", color = Color.Gray)
-            }
-        },
-        containerColor = Color.White,
-        shape = RoundedCornerShape(28.dp)
-    )
 }

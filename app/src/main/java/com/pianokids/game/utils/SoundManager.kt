@@ -3,6 +3,7 @@ package com.pianokids.game.utils
 
 import android.content.Context
 import android.media.MediaPlayer
+import android.media.SoundPool
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -12,6 +13,10 @@ import com.pianokids.game.R
 object SoundManager {
     private var clickPlayer: MediaPlayer? = null
     private var bgPlayer: MediaPlayer? = null
+
+    private var soundPool: SoundPool? = null
+    private var typingSoundId: Int? = null
+
     private var vibrator: Vibrator? = null
 
     private var isSoundEnabled = true
@@ -24,6 +29,13 @@ object SoundManager {
             isLooping = true
             setVolume(0.4f, 0.4f)
         }
+
+        soundPool = SoundPool.Builder()
+            .setMaxStreams(4)
+            .build()
+
+        typingSoundId = soundPool?.load(context, R.raw.typing_sound, 1)
+
 
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
@@ -107,9 +119,20 @@ object SoundManager {
 
     fun isVibrationEnabled(): Boolean = isVibrationEnabled
 
+    fun playTyping() {
+        if (!isSoundEnabled) return
+        typingSoundId?.let { id ->
+            soundPool?.play(id, 1f, 1f, 1, 0, 1.0f)
+        }
+    }
+
+
     fun release() {
         clickPlayer?.release()
         bgPlayer?.release()
+        soundPool?.release()
+        soundPool = null
+        typingSoundId = null
         clickPlayer = null
         bgPlayer = null
         vibrator = null
