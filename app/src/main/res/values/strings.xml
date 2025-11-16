@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Piano Kids</string>
-    <string name="default_web_client_id">151121581529-9fa29qlmv5bacqrqinm0od67t4v32tbj.apps.googleusercontent.com</string>
+    <string name="default_web_client_id">151121581529-gqde01diq4oij813nqtj3ob1ukreodk5.apps.googleusercontent.com</string>
 
     <!-- FIXED: Use the correct Facebook App ID -->
     <string name="facebook_app_id">1347193153711604</string>
