@@ -1,9 +1,13 @@
 
 package com.pianokids.game.view.screens
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -27,12 +31,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
+import androidx.compose.ui.unit.fontscaling.MathUtils.lerp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.pianokids.game.R
 import com.pianokids.game.data.models.Level
+import com.pianokids.game.data.models.UnlockedLevelItem
 import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.ui.theme.*
@@ -99,13 +105,16 @@ fun HomeScreen(
     val userPhotoUrl = user?.photoUrl
 
     var levels by remember { mutableStateOf<List<Level>>(emptyList()) }
-    var unlockedMap by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var progressMap by remember {
+        mutableStateOf<Map<String, UnlockedLevelItem>>(emptyMap())
+    }
 
-    val totalStars = user?.score ?: 0
+    val totalStars = progressMap.values.sumOf { it.starsUnlocked }
 
     // Animation offsets
     var waveOffset by remember { mutableStateOf(0f) }
     var cloudOffset by remember { mutableStateOf(0f) }
+    var birdOffset by remember { mutableStateOf(0f) }
     var floatOffset by remember { mutableStateOf(0f) }
 
     LaunchedEffect(Unit) {
@@ -114,6 +123,7 @@ fun HomeScreen(
             waveOffset += 0.5f
             cloudOffset += 0.3f
             floatOffset += 0.05f
+            birdOffset += 0.3f
             kotlinx.coroutines.delay(50)
         }
     }
@@ -126,13 +136,28 @@ fun HomeScreen(
         levels = allLevels.sortedBy { it.order }
 
         // Unlocking logic
-        unlockedMap =
+        progressMap =
             if (isLoggedIn && userId != "guest") {
                 val response = levelRepository.getUnlockedLevels(userId)
-                response?.levels?.associate { it.levelId to it.unlocked } ?: emptyMap()
+                response?.levels?.associateBy { it.levelId } ?: emptyMap()
             } else {
-                allLevels.firstOrNull()?.let { lvl -> mapOf(lvl._id to true) } ?: emptyMap()
+                // Guest: only unlock level 1, with stars=0
+                allLevels.firstOrNull()?.let { lvl ->
+                    mapOf(
+                        lvl._id to UnlockedLevelItem(
+                            levelId = lvl._id,
+                            title = lvl.title,
+                            theme = lvl.theme,
+                            unlocked = true,
+                            starsUnlocked = 0,
+                            backgroundUrl = lvl.backgroundUrl,
+                            bossUrl = lvl.bossUrl,
+                            musicUrl = lvl.musicUrl
+                        )
+                    )
+                } ?: emptyMap()
             }
+
 
         isLoading = false
     }
@@ -154,8 +179,14 @@ fun HomeScreen(
             birdOffset = birdOffset
         )
 
+        // path
+        LevelPathCanvas(
+            levels = levels,
+            progressMap = progressMap
+        )
+
         // Background ocean
-        OceanMapBackground(waveOffset = waveOffset, cloudOffset = cloudOffset)
+        OceanMapBackground(waveOffset = waveOffset, cloudOffset = cloudOffset, birdOffset= birdOffset)
 
         // Loading overlay
         if (isLoading) {
@@ -200,11 +231,14 @@ fun HomeScreen(
                 ) {
                     levels.forEach { level ->
 
-                        val isUnlocked = unlockedMap[level._id] == true
+                        val progress = progressMap[level._id]
+                        val isUnlocked = progress?.unlocked == true
+                        val stars = progress?.starsUnlocked ?: 0
 
                         MapIsland(
                             level = level,
                             isUnlocked = isUnlocked,
+                            stars = stars,
                             floatOffset = floatOffset,
                             onClick = {
                                 SoundManager.playClick()
@@ -317,6 +351,7 @@ fun HomeScreen(
 fun MapIsland(
     level: Level,
     isUnlocked: Boolean,
+    stars: Int,                // ⭐ Stars passed from progressMap
     floatOffset: Float,
     onClick: () -> Unit
 ) {
@@ -379,7 +414,7 @@ fun MapIsland(
                                 Icon(
                                     Icons.Default.Star,
                                     contentDescription = null,
-                                    tint = if (i < level.starsUnlocked) RainbowYellow else Color.LightGray,
+                                    tint = if (i < stars) RainbowYellow else Color.LightGray,
                                     modifier = Modifier.size(14.dp)
                                 )
                             }
@@ -408,13 +443,112 @@ fun MapIsland(
 // BACKGROUND
 // -------------------------------------------------------------
 @Composable
-fun OceanMapBackground(waveOffset: Float, cloudOffset: Float) {
-    Image(
-        painter = painterResource(R.drawable.sea),
-        contentDescription = null,
-        modifier = Modifier.fillMaxSize(),
-        contentScale = ContentScale.Crop
-    )
+fun OceanMapBackground(
+    waveOffset: Float,
+    cloudOffset: Float,
+    birdOffset: Float
+) {
+    // Initialize clouds
+    val clouds = remember {
+        listOf(
+            Cloud(1, -200f, 100f, 120f, 1.2f, 0.7f),
+            Cloud(2, 300f, 180f, 150f, 0.8f, 0.6f),
+            Cloud(3, 800f, 80f, 100f, 1.5f, 0.8f),
+            Cloud(4, 1200f, 220f, 130f, 1.0f, 0.65f),
+            Cloud(5, 1600f, 140f, 140f, 0.9f, 0.75f),
+            Cloud(6, 2000f, 190f, 110f, 1.3f, 0.7f)
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background image (sea.png)
+        Image(
+            painter = painterResource(id = R.drawable.sea),
+            contentDescription = "Ocean Background",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.FillBounds
+        )
+
+        // Canvas for waves, clouds, and birds
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val width = size.width
+            val height = size.height
+
+            // DRAW CLOUDS
+            clouds.forEach { cloud ->
+                val cloudX = (cloud.x + cloudOffset * cloud.speed) % (width + 400f) - 200f
+
+                // Draw cloud using circles
+                val cloudColor = Color.White.copy(alpha = cloud.alpha)
+
+                // Main cloud body (3 overlapping circles)
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.5f,
+                    center = Offset(cloudX, cloud.y)
+                )
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.6f,
+                    center = Offset(cloudX + cloud.size * 0.4f, cloud.y)
+                )
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.55f,
+                    center = Offset(cloudX + cloud.size * 0.8f, cloud.y + cloud.size * 0.1f)
+                )
+                drawCircle(
+                    color = cloudColor,
+                    radius = cloud.size * 0.45f,
+                    center = Offset(cloudX - cloud.size * 0.3f, cloud.y + cloud.size * 0.15f)
+                )
+            }
+
+
+
+            // ANIMATED WAVES
+            val waveCount = 8
+            val baseWaveHeight = 15f
+            val waveLength = width / 3f
+
+            for (i in 0 until waveCount) {
+                val yOffset = height * 0.3f + i * 60f
+                val phase = waveOffset + i * 0.5f
+                val waveHeight = baseWaveHeight * (1f - i * 0.06f)
+
+                val path = Path().apply {
+                    var x = -waveLength
+                    moveTo(x, yOffset)
+
+                    while (x < width + waveLength) {
+                        val angle = (x + phase * 10f) / waveLength * Math.PI * 2
+                        val y = yOffset + waveHeight * sin(angle).toFloat()
+                        lineTo(x, y)
+                        x += 10f
+                    }
+
+                    lineTo(width + waveLength, height)
+                    lineTo(-waveLength, height)
+                    close()
+                }
+
+                // Subtle wave overlay
+                drawPath(
+                    path = path,
+                    color = Color.White.copy(alpha = 0.08f - i * 0.008f)
+                )
+
+                // Wave highlights
+                if (i % 2 == 0) {
+                    drawPath(
+                        path = path,
+                        color = Color.White.copy(alpha = 0.15f - i * 0.015f),
+                        style = Stroke(width = 1.5f)
+                    )
+                }
+            }
+        }
+    }
 }
 
 // -------------------------------------------------------------
@@ -461,7 +595,7 @@ fun CompactGameHeader(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 25.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
         elevation = CardDefaults.cardElevation(6.dp)
@@ -589,3 +723,86 @@ fun CompactGameHeader(
         }
     }
 }
+
+@SuppressLint("RestrictedApi")
+@Composable
+fun LevelPathCanvas(
+    levels: List<Level>,
+    progressMap: Map<String, UnlockedLevelItem>
+) {
+    if (levels.isEmpty()) return
+
+    val sorted = levels.sortedBy { it.order }
+
+    val points = sorted.map { lvl ->
+        Offset(
+            x = lvl.mapPosition.x * 1600f,
+            y = lvl.mapPosition.y * 1400f
+        )
+    }
+
+    val unlockedCount = progressMap.values.count { it.unlocked }
+
+    // ---- Animated reveal value ----
+    val revealProgress by animateFloatAsState(
+        targetValue = unlockedCount.toFloat(),
+        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing)
+    )
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+
+        if (points.size < 2) return@Canvas
+
+        // ---------- 1) BASE GREY PATH (always visible) ----------
+        for (i in 0 until points.size - 1) {
+            drawLine(
+                color = Color.LightGray.copy(alpha = 0.35f),
+                start = points[i],
+                end = points[i + 1],
+                strokeWidth = 22f,
+                cap = StrokeCap.Round
+            )
+        }
+
+        // ---------- 2) GLOWING PATH FOR UNLOCKED AREAS ----------
+        for (i in 0 until points.size - 1) {
+
+            if (revealProgress <= i) break  // Don't draw beyond animation
+
+            val endFraction =
+                when {
+                    revealProgress > i + 1 -> 1f  // fully revealed
+                    revealProgress > i -> revealProgress - i  // partial glowing segment
+                    else -> 0f
+                }
+
+            val start = points[i]
+            val end = points[i + 1]
+
+            val partialEnd = Offset(
+                x = lerp(start.x, end.x, endFraction),
+                y = lerp(start.y, end.y, endFraction)
+            )
+
+            drawLine(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF00F7FF),
+                        Color(0xFF00CFFF),
+                        Color(0x0000CFFF)
+                    ),
+                    center = start,
+                    radius = 300f
+                ),
+                start = start,
+                end = partialEnd,
+                strokeWidth = 28f,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+

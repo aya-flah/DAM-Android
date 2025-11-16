@@ -19,7 +19,8 @@ data class LevelUiState(
     val isFailed: Boolean = false,
     val wrongNoteCount: Int = 0,
     val showWrongAnimation: Boolean = false,
-    val wrongMessage: String? = null
+    val wrongMessage: String? = null,
+    val score: Int = 0
 )
 
 class LevelViewModel : ViewModel() {
@@ -69,6 +70,9 @@ class LevelViewModel : ViewModel() {
                     currentNoteIndex = 0,
                     isLevelCompleted = false,
                     isFailed = false,
+                    wrongNoteCount = 0,
+                    score = 0,
+                    wrongMessage = null,
                     isLoading = false
                 )
             } else {
@@ -84,8 +88,10 @@ class LevelViewModel : ViewModel() {
         val state = _uiState.value
         val index = state.currentNoteIndex
 
+        // Guard clauses
         if (state.isLevelCompleted || state.isFailed) return
         if (expectedNotes.isEmpty()) return
+        if (index >= expectedNotes.size) return
 
         val expected = expectedNotes[index].lowercase()
 
@@ -93,32 +99,34 @@ class LevelViewModel : ViewModel() {
         // CORRECT NOTE
         // ---------------------------
         if (note.lowercase() == expected) {
-
             val newIndex = index + 1
             val progress = newIndex.toFloat() / expectedNotes.size.toFloat()
 
-            // Reset wrong-note count + hide previous error
-            _uiState.value = state.copy(
-                wrongNoteCount = 0,
-                showWrongAnimation = false,
-                wrongMessage = null
-            )
+            // ⭐ Correct → Increase score
+            val newScore = (state.score + 10).coerceAtMost(100)
 
-            // If last note → complete
             if (newIndex == expectedNotes.size) {
-                _uiState.value = _uiState.value.copy(
+                // Level completed
+                _uiState.value = state.copy(
                     currentNoteIndex = newIndex,
                     progressPercentage = 1f,
+                    score = newScore,
+                    wrongNoteCount = 0,
+                    showWrongAnimation = false,
+                    wrongMessage = null,
                     isLevelCompleted = true
                 )
             } else {
-                // Normal progress advance
-                _uiState.value = _uiState.value.copy(
+                // Normal progress
+                _uiState.value = state.copy(
                     currentNoteIndex = newIndex,
-                    progressPercentage = progress
+                    progressPercentage = progress,
+                    score = newScore,
+                    wrongNoteCount = 0,
+                    showWrongAnimation = false,
+                    wrongMessage = null
                 )
             }
-
             return
         }
 
@@ -126,24 +134,26 @@ class LevelViewModel : ViewModel() {
         // WRONG NOTE
         // ---------------------------
         val newWrongCount = state.wrongNoteCount + 1
+        val newScore = (state.score - 5).coerceAtLeast(0)
 
         if (newWrongCount >= 3) {
             _uiState.value = state.copy(
                 isFailed = true,
                 wrongNoteCount = 0,
                 showWrongAnimation = false,
-                wrongMessage = null
+                wrongMessage = null,
+                score = newScore
             )
             return
         }
 
         _uiState.value = state.copy(
-            wrongNoteCount = newWrongCount,
             showWrongAnimation = true,
+            wrongNoteCount = newWrongCount,
+            score = newScore,
             wrongMessage = "Wrong note! Try again!"
         )
     }
-
 
     /**
      * Save progress
@@ -152,19 +162,19 @@ class LevelViewModel : ViewModel() {
         val level = _uiState.value.currentLevel ?: return
 
         viewModelScope.launch {
-            val score = (_uiState.value.progressPercentage * 100).toInt()
+            val score = _uiState.value.score
 
             val stars = when {
-                score >= 90 -> 3
-                score >= 70 -> 2
-                score >= 40 -> 1
+                score >= 85 -> 3
+                score >= 60 -> 2
+                score >= 30 -> 1
                 else -> 0
             }
 
             repository.saveProgress(
                 LevelProgressRequest(
                     userId = userId,
-                    levelId = level._id,     // ✔ updated from _id → id
+                    levelId = level._id,
                     stars = stars,
                     score = score,
                     completed = true
