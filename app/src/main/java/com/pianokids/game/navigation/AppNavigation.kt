@@ -5,7 +5,9 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.pianokids.game.view.screens.AppPianoScreen
 import com.pianokids.game.view.screens.HomeScreen
+import com.pianokids.game.view.screens.LevelOneScreen
 import com.pianokids.game.view.screens.ProfileScreen
 import com.pianokids.game.view.screens.WelcomeScreen
 
@@ -14,8 +16,10 @@ sealed class Screen(val route: String) {
     object Auth : Screen("auth")
     object Home : Screen("home")
     object Profile : Screen("profile")
-
-
+    object Level1 : Screen("level1")
+    object AppPiano : Screen("app_piano/{levelNumber}") {
+        fun createRoute(levelNumber: Int) = "app_piano/$levelNumber"
+    }
 }
 
 @Composable
@@ -35,7 +39,8 @@ fun AppNavigation(context: Context) {
 
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateToProfile = { navController.navigate(Screen.Profile.route) }
+                onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
+                onNavigateToLevel1 = { navController.navigate(Screen.Level1.route) }
             )
         }
         composable(Screen.Profile.route) {
@@ -50,5 +55,18 @@ fun AppNavigation(context: Context) {
             )
         }
 
+        composable(Screen.Level1.route) {
+            LevelOneScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.AppPiano.route) { backStackEntry ->
+            val levelNumber = backStackEntry.arguments?.getString("levelNumber")?.toIntOrNull() ?: 1
+            AppPianoScreen(
+                levelNumber = levelNumber,
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
+}

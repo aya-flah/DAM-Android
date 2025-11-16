@@ -17,6 +17,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.facebook.FacebookSdk
 import com.pianokids.game.view.screens.HomeScreen
+import com.pianokids.game.view.screens.LevelOneScreen
+import com.pianokids.game.view.screens.PianoPracticeScreen
 import com.pianokids.game.view.screens.ProfileScreen
 import com.pianokids.game.view.screens.WelcomeScreen
 import com.pianokids.game.ui.theme.PianoKidsGameTheme
@@ -125,7 +127,8 @@ class MainActivity : ComponentActivity() {
                         composable("home") {
                             HomeScreen(
                                 onNavigateToProfile = { navController.navigate("profile") },
-                                onNavigateToAuth = { navController.navigate("welcome") }
+                                onNavigateToAuth = { navController.navigate("welcome") },
+                                onNavigateToLevel1 = { navController.navigate("level1") }
                             )
                         }
 
@@ -139,6 +142,23 @@ class MainActivity : ComponentActivity() {
                                         popUpTo(0) { inclusive = true }
                                     }
                                 }
+                            )
+                        }
+
+                        composable("level1") {
+                            LevelOneScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                onStartAppPiano = { navController.navigate("app_piano/1") }
+                            )
+                        }
+
+                        composable("app_piano/{levelNumber}") { backStackEntry ->
+                            val levelNumber = backStackEntry.arguments?.getString("levelNumber")?.toIntOrNull() ?: 1
+                            PianoPracticeScreen(
+                                levelNumber = levelNumber,
+                                levelTheme = "Batman",
+                                backgroundImage = com.pianokids.game.R.drawable.bg_level1,
+                                onNavigateBack = { navController.popBackStack() }
                             )
                         }
                     }
