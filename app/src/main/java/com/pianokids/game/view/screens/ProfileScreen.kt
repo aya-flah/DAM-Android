@@ -27,10 +27,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.pianokids.game.data.repository.AuthRepository
+import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.ui.theme.*
 import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
@@ -103,10 +103,14 @@ fun ProfileScreen(
         else -> 1
     }
 
-    val totalStars = when {
-        user != null -> user.score / 100
-        isLoggedIn -> userPrefs.getTotalStars()
-        else -> 0
+    val totalStars = remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        val allLevels = LevelRepository().getAllLevels() ?: emptyList()
+        val unlocked = LevelRepository().getUnlockedLevels(user?.id ?: "")
+
+        val total = unlocked?.levels?.sumOf { it.starsUnlocked } ?: 0
+        totalStars.value = total
     }
 
     val maxStars = 24
@@ -325,7 +329,7 @@ fun ProfileScreen(
                 StatsCard(
                     icon = "⭐",
                     title = "Stars",
-                    value = "$totalStars/$maxStars",
+                    value = "${totalStars.value}/$maxStars",
                     color = RainbowOrange,
                     modifier = Modifier.weight(1f)
                 )
@@ -335,7 +339,7 @@ fun ProfileScreen(
             // Achievements Section
             // ──────────────────────────────────────────────
             Spacer(Modifier.height(16.dp))
-            AchievementsSection(totalStars = totalStars, userLevel = userLevel)
+            AchievementsSection(totalStars = totalStars.value, userLevel = userLevel)
 
             // ──────────────────────────────────────────────
             // Account Info Card
@@ -393,7 +397,7 @@ fun ProfileScreen(
                         InfoRow(
                             icon = Icons.Default.Star,
                             label = "Progress",
-                            value = "${(totalStars.toFloat() / maxStars * 100).toInt()}%"
+                            value = "${totalStars.value}/$maxStars"
                         )
                     }
 

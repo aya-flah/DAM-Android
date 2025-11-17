@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.play.services.games)
+    implementation(libs.androidx.compose.animation.core)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -119,4 +120,6 @@ dependencies {
 
     // DataStore pour stocker le token
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    implementation("io.coil-kt:coil-compose:2.5.0")
 }
