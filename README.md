@@ -1,6 +1,11 @@
-# TuneIsland (Android Client)
 
-![TuneIsland Banner](https://i.ibb.co/YFQ3gwnS/575970602-1315469567260441-1313972598450601892-n.jpg)
+<p align="center">
+  <img src="https://i.ibb.co/YFQ3gwnS/575970602-1315469567260441-1313972598450601892-n.jpg" width="200" height="200"> 
+</p>
+
+
+
+# TuneIsland (Android Client)
 
 > A magical game for tablets that teaches kids the joy of playing the piano. This repository contains the Android version of the game.
 
