@@ -5,16 +5,30 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# WebView JavaScript Interface
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Keep WebView related classes
+-keepclassmembers class com.pianokids.game.utils.components.AvatarCreationDialog* {
+    public *;
+}
+
+# Keep JavaScript interface methods
+-keepclassmembers class com.pianokids.game.utils.components.AvatarCreationDialog$*$* {
+    public *;
+}
+
+# WebView
+-keep class android.webkit.** { *; }
+-dontwarn android.webkit.**
+
+# Keep source file and line numbers for debugging
+-keepattributes SourceFile,LineNumberTable
+
+# Keep annotation attributes
+-keepattributes *Annotation*
 
 # If you keep the line number information, uncomment this to
 # hide the original source file name.

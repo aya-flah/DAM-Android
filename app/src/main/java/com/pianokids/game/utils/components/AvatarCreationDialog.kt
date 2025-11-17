@@ -2,6 +2,7 @@ package com.pianokids.game.utils.components
 
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
 import android.webkit.JavascriptInterface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -31,12 +32,12 @@ fun AvatarCreationDialog(
 ) {
     val context = LocalContext.current
     val userPrefs = remember { UserPreferences(context) }
-    
+
     var avatarName by remember { mutableStateOf("") }
     var showNameError by remember { mutableStateOf(false) }
     var currentStep by remember { mutableStateOf(AvatarCreationStep.NAME) }
     var capturedAvatarUrl by remember { mutableStateOf<String?>(null) }
-    
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -66,7 +67,7 @@ fun AvatarCreationDialog(
                         NameInputStep(
                             avatarName = avatarName,
                             showError = showNameError,
-                            onNameChange = { 
+                            onNameChange = {
                                 avatarName = it
                                 showNameError = false
                             },
@@ -80,7 +81,7 @@ fun AvatarCreationDialog(
                             onCancel = onDismiss
                         )
                     }
-                    
+
                     AvatarCreationStep.AVATAR_CHOICE -> {
                         AvatarChoiceStep(
                             avatarName = avatarName,
@@ -96,7 +97,7 @@ fun AvatarCreationDialog(
                             }
                         )
                     }
-                    
+
                     AvatarCreationStep.READY_PLAYER_ME -> {
                         ReadyPlayerMeStep(
                             onAvatarCreated = { avatarUrl ->
@@ -111,7 +112,7 @@ fun AvatarCreationDialog(
                             onCancel = onDismiss
                         )
                     }
-                    
+
                     AvatarCreationStep.WAITING_FOR_AVATAR -> {
                         // Not used anymore
                     }
@@ -148,14 +149,14 @@ private fun NameInputStep(
             color = Color.White,
             textAlign = TextAlign.Center
         )
-        
+
         Text(
             text = "Choose a name for your avatar",
             fontSize = 16.sp,
             color = Color.White.copy(alpha = 0.8f),
             textAlign = TextAlign.Center
         )
-        
+
         OutlinedTextField(
             value = avatarName,
             onValueChange = onNameChange,
@@ -172,7 +173,7 @@ private fun NameInputStep(
             ),
             modifier = Modifier.fillMaxWidth()
         )
-        
+
         if (showError) {
             Text(
                 text = "Please enter a name",
@@ -181,7 +182,7 @@ private fun NameInputStep(
                 fontWeight = FontWeight.Medium
             )
         }
-        
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -196,7 +197,7 @@ private fun NameInputStep(
             ) {
                 Text("Cancel", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
-            
+
             Button(
                 onClick = onNext,
                 modifier = Modifier.weight(1f),
@@ -231,14 +232,14 @@ private fun AvatarChoiceStep(
             color = Color.White,
             textAlign = TextAlign.Center
         )
-        
+
         Text(
             text = "Choose how to create your avatar",
             fontSize = 16.sp,
             color = Color.White.copy(alpha = 0.8f),
             textAlign = TextAlign.Center
         )
-        
+
         // Ready Player Me Button
         Button(
             onClick = onCreateWithReadyPlayerMe,
@@ -266,7 +267,7 @@ private fun AvatarChoiceStep(
                 )
             }
         }
-        
+
         // Skip Button
         OutlinedButton(
             onClick = onCreateWithoutAvatar,
@@ -284,7 +285,7 @@ private fun AvatarChoiceStep(
                 fontWeight = FontWeight.SemiBold
             )
         }
-        
+
         // Back Button
         TextButton(onClick = onBack) {
             Text(
@@ -305,11 +306,12 @@ private fun ReadyPlayerMeStep(
 ) {
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
-    
+
     // Ready Player Me subdomain URL with app ID
     val appId = "6918ea1dce04903d215e004c"
-    val readyPlayerMeUrl = "https://pianokids-vo6xpt.readyplayer.me/avatar?frameApi&userId=$appId"
-    
+    // Use Ready Player Me public endpoint for avatar creation
+    val readyPlayerMeUrl = "https://ready.player.me/?frameApi"
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -324,24 +326,46 @@ private fun ReadyPlayerMeStep(
             color = Color.White,
             textAlign = TextAlign.Center
         )
-        
+
         if (isLoading) {
             CircularProgressIndicator(
                 color = Color.White,
                 modifier = Modifier.size(24.dp)
             )
         }
-        
+
         if (loadError != null) {
-            Text(
-                text = "Error loading avatar creator: $loadError",
-                color = RainbowRed,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(8.dp)
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "⚠️ Unable to load avatar creator",
+                    color = RainbowRed,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Please check your internet connection or try again later",
+                    color = RainbowRed,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(4.dp)
+                )
+                Text(
+                    text = "Error: $loadError",
+                    color = Color(0xFFFF9800),
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(4.dp)
+                )
+            }
         }
-        
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -351,63 +375,154 @@ private fun ReadyPlayerMeStep(
             AndroidView(
                 factory = { context ->
                     WebView(context).apply {
+                        // Enable JavaScript and DOM storage
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         settings.databaseEnabled = true
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
+
+                        // Additional WebView settings for better compatibility
+                        settings.javaScriptCanOpenWindowsAutomatically = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        settings.allowFileAccess = true
+                        settings.allowContentAccess = true
                         
+                        // Enable cookie support for session management
+                        android.webkit.CookieManager.getInstance().setAcceptCookie(true)
+                        android.webkit.CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+
+                        // Cache configuration
+                        settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        
+                        // Set proper user agent
+                        settings.userAgentString = "Mozilla/5.0 (Android; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0"
+
+                        // Enable debugging for WebView
+                        WebView.setWebContentsDebuggingEnabled(true)
+
+                        // Set background to white
+                        setBackgroundColor(android.graphics.Color.WHITE)
+
                         webViewClient = object : WebViewClient() {
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 super.onPageFinished(view, url)
                                 Log.d("WebView", "Page finished loading: $url")
                                 isLoading = false
+                                loadError = null // Clear any previous errors
+
+                                // Inject message listener after page loads
+                                view?.evaluateJavascript("""
+                                    (function() {
+                                        console.log('Injecting Ready Player Me listener');
+                                        window.addEventListener('message', function(event) {
+                                            console.log('RPM Message received:', JSON.stringify(event.data));
+                                            try {
+                                                if (event.data && typeof event.data === 'object') {
+                                                    if (event.data.eventName === 'v1.avatar.exported') {
+                                                        const avatarUrl = event.data.data.url;
+                                                        console.log('Avatar exported URL:', avatarUrl);
+                                                        if (avatarUrl && window.AndroidInterface) {
+                                                            window.AndroidInterface.onAvatarExported(avatarUrl);
+                                                        }
+                                                    }
+                                                }
+                                            } catch(e) {
+                                                console.error('Error handling message:', e);
+                                            }
+                                        });
+                                        console.log('Ready Player Me listener installed');
+                                    })();
+                                """.trimIndent(), null)
                             }
-                            
+
                             override fun onReceivedError(
                                 view: WebView?,
                                 request: android.webkit.WebResourceRequest?,
                                 error: android.webkit.WebResourceError?
                             ) {
                                 super.onReceivedError(view, request, error)
-                                val errorMsg = "WebView Error: ${error?.description}"
-                                Log.e("WebView", errorMsg)
-                                loadError = errorMsg
+                                val errorCode = error?.errorCode ?: -1
+                                val errorMsg = error?.description?.toString() ?: "Unknown error"
+                                val url = request?.url?.toString() ?: "Unknown URL"
+
+                                Log.e("WebView", "Error loading $url: Code=$errorCode, Message=$errorMsg")
+
+                                // Map error codes to human-readable messages
+                                val errorDescription = when (errorCode) {
+                                    android.webkit.WebViewClient.ERROR_TIMEOUT -> 
+                                        "Connection timeout - check internet connection"
+                                    android.webkit.WebViewClient.ERROR_HOST_LOOKUP -> 
+                                        "Cannot resolve domain - check internet connection"
+                                    android.webkit.WebViewClient.ERROR_CONNECT -> 
+                                        "Cannot connect to server"
+                                    android.webkit.WebViewClient.ERROR_BAD_URL -> 
+                                        "Invalid URL"
+                                    android.webkit.WebViewClient.ERROR_FILE_NOT_FOUND -> 
+                                        "Page not found (404)"
+                                    android.webkit.WebViewClient.ERROR_UNSUPPORTED_AUTH_SCHEME -> 
+                                        "Unsupported authentication"
+                                    else -> errorMsg
+                                }
+
+                                loadError = "[$errorCode] $errorDescription"
                                 isLoading = false
                             }
+
+                            override fun onReceivedHttpError(
+                                view: WebView?,
+                                request: android.webkit.WebResourceRequest?,
+                                errorResponse: android.webkit.WebResourceResponse?
+                            ) {
+                                super.onReceivedHttpError(view, request, errorResponse)
+                                val statusCode = errorResponse?.statusCode ?: -1
+                                val url = request?.url?.toString() ?: "Unknown"
+                                Log.e("WebView", "HTTP Error $statusCode: $url")
+                                
+                                if (statusCode == 404 || statusCode == 500) {
+                                    loadError = "Server error (HTTP $statusCode)"
+                                }
+                            }
                         }
-                        
+
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                                consoleMessage?.let {
+                                    Log.d("WebView-Console", "${it.message()} -- From line ${it.lineNumber()} of ${it.sourceId()}")
+                                }
+                                return true
+                            }
+
+                            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                                super.onProgressChanged(view, newProgress)
+                                Log.d("WebView", "Loading progress: $newProgress%")
+                                if (newProgress == 100) {
+                                    isLoading = false
+                                }
+                            }
+                        }
+
                         addJavascriptInterface(object {
                             @JavascriptInterface
                             fun onAvatarExported(avatarUrl: String) {
-                                Log.d("WebView", "Avatar exported: $avatarUrl")
+                                Log.d("WebView", "Avatar exported via JavaScript Interface: $avatarUrl")
                                 onAvatarCreated(avatarUrl)
                             }
                         }, "AndroidInterface")
+
+                        Log.d("WebView", "Loading Ready Player Me URL: $readyPlayerMeUrl")
                         
-                        Log.d("WebView", "Loading URL: $readyPlayerMeUrl")
-                        loadUrl(readyPlayerMeUrl)
-                        
-                        // Listen for messages from Ready Player Me
-                        evaluateJavascript("""
-                            (function() {
-                                console.log('Ready Player Me WebView initialized');
-                                window.addEventListener('message', function(event) {
-                                    console.log('Message received:', event.data);
-                                    if (event.data && event.data.eventName === 'v1.avatar.exported') {
-                                        const avatarUrl = event.data.data.url;
-                                        console.log('Avatar URL:', avatarUrl);
-                                        AndroidInterface.onAvatarExported(avatarUrl);
-                                    }
-                                });
-                            })();
-                        """.trimIndent(), null)
+                        // Load URL with proper headers
+                        val headers = HashMap<String, String>()
+                        headers["User-Agent"] = "Mozilla/5.0 (Android; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0"
+                        loadUrl(readyPlayerMeUrl, headers)
                     }
                 },
                 modifier = Modifier.fillMaxSize()
             )
         }
-        
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -422,7 +537,7 @@ private fun ReadyPlayerMeStep(
             ) {
                 Text("← Back", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             }
-            
+
             OutlinedButton(
                 onClick = onCancel,
                 modifier = Modifier.weight(1f),

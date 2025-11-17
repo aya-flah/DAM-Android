@@ -37,6 +37,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.pianokids.game.utils.components.LevelCompletedDialog
+import com.pianokids.game.view.components.PianoKeyboard
+import com.pianokids.game.viewmodel.PianoViewModel
 
 @Composable
 fun LevelScreen(
@@ -476,77 +478,60 @@ fun LevelScreen(
                 Spacer(modifier = Modifier.weight(1f))
 
                 // --------------------------
-                // PIANO PLACEHOLDER (Enhanced)
+                // PIANO KEYBOARD
                 // --------------------------
-                Box(
+                val pianoViewModel: PianoViewModel = viewModel()
+                var pressedKeys by remember { mutableStateOf(setOf<String>()) }
+                var lastPlayedNote by remember { mutableStateOf("") }
+                
+                PianoKeyboard(
+                    config = pianoViewModel.pianoState.collectAsState().value.config,
+                    onKeyPressed = { key ->
+                        pressedKeys = pressedKeys + key.note
+                        pianoViewModel.onKeyPressed(key)
+                        
+                        // Only process if we're not at the end of notes
+                        if (state.currentNoteIndex < level.expectedNotes.size) {
+                            val expectedNote = level.expectedNotes[state.currentNoteIndex]
+                            
+                            // Normalize both strings: lowercase and remove accents for comparison
+                            val normalizeString = { s: String ->
+                                s.lowercase()
+                                    .replace("é", "e")
+                                    .replace("è", "e")
+                                    .replace("ê", "e")
+                                    .replace("à", "a")
+                                    .replace("ù", "u")
+                                    .replace("ô", "o")
+                            }
+                            
+                            val normalizedExpected = normalizeString(expectedNote)
+                            val normalizedSolfege = normalizeString(key.solfege)
+                            
+                            // Prevent multiple rapid triggers for the same note
+                            if (normalizedSolfege != lastPlayedNote) {
+                                lastPlayedNote = normalizedSolfege
+                                
+                                // Send the original solfege (lowercase) to viewModel
+                                viewModel.onNotePlayed(key.solfege.lowercase())
+                            }
+                        }
+                    },
+                    onKeyReleased = { key ->
+                        pressedKeys = pressedKeys - key.note
+                        pianoViewModel.onKeyReleased(key)
+                        lastPlayedNote = ""
+                    },
+                    pressedKeys = pressedKeys,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(260.dp)
                         .shadow(12.dp, RoundedCornerShape(24.dp))
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF1A1A2E).copy(alpha = 0.95f),
-                                    Color(0xFF16213E).copy(alpha = 0.95f)
-                                )
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        )
                         .border(
                             width = 2.dp,
                             color = Color(0xFF00D9FF).copy(alpha = 0.3f),
                             shape = RoundedCornerShape(24.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "🎹 PIANO PLACEHOLDER",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-
-                // TEST BUTTONS (Enhanced)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Button(
-                        onClick = {
-                            if (state.currentNoteIndex < level.expectedNotes.size) {
-                                val next = level.expectedNotes[state.currentNoteIndex]
-                                viewModel.onNotePlayed(next)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF00D9FF)
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(end = 8.dp)
-                            .shadow(8.dp, RoundedCornerShape(12.dp))
-                    ) {
-                        Text("Correct Note", fontWeight = FontWeight.Bold)
-                    }
-
-                    Button(
-                        onClick = {
-                            viewModel.onNotePlayed("WRONG_NOTE")
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFFF5E62)
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 8.dp)
-                            .shadow(8.dp, RoundedCornerShape(12.dp))
-                    ) {
-                        Text("Wrong Note", fontWeight = FontWeight.Bold)
-                    }
-                }
+                        )
+                )
 
                 Spacer(modifier = Modifier.height(30.dp))
             }
