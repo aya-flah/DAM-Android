@@ -1,6 +1,7 @@
 package com.pianokids.game.view.screens
 
 import android.app.Activity
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -74,6 +75,8 @@ fun WelcomeScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        Log.d("login procc", result.data.toString());
+        Log.d("login procc", task.toString());
         socialLoginManager.handleGoogleSignInResult(task)
     }
 

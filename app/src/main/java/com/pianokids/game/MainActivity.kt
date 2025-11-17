@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.pianokids.game.view.screens.levels.LevelScreen
+import com.pianokids.game.utils.PianoSoundManager
 
 
 class MainActivity : ComponentActivity() {
@@ -51,6 +52,9 @@ class MainActivity : ComponentActivity() {
         userPrefs = UserPreferences(this)
         authRepository = AuthRepository(this)
         authViewModel = AuthViewModel(application)
+
+        // Initialize Piano Sound Manager
+        PianoSoundManager.init(this)
 
         SoundManager.init(this)
 
@@ -171,5 +175,11 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         socialLoginManager.handleFacebookResult(requestCode, resultCode, data)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Release Piano Sound Manager resources
+        PianoSoundManager.release()
     }
 }
