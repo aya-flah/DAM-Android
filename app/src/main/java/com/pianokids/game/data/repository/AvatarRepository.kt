@@ -25,23 +25,35 @@ class AvatarRepository(private val context: Context) {
     
     suspend fun createAvatar(createAvatarDto: CreateAvatarDto): Result<Avatar> {
         return try {
+            Log.d("AvatarRepository", "🎯 createAvatar called with DTO: $createAvatarDto")
+            
             val (authToken, providerId) = getAuthHeaders() ?: return Result.failure(
                 Exception("Not authenticated")
             )
             
+            Log.d("AvatarRepository", "🎯 Auth headers - Token: ${authToken.take(20)}..., Provider: $providerId")
+            Log.d("AvatarRepository", "🎯 Making API call to create avatar...")
+            
             val response = api.createAvatar(createAvatarDto, authToken, providerId)
+            
+            Log.d("AvatarRepository", "🎯 API response code: ${response.code()}")
+            Log.d("AvatarRepository", "🎯 API response successful: ${response.isSuccessful}")
             
             if (response.isSuccessful && response.body() != null) {
                 val avatar = response.body()!!
-                Log.d("AvatarRepository", "Avatar created: ${avatar.name}")
+                Log.d("AvatarRepository", "✅ Avatar created successfully: ${avatar.name}, ID: ${avatar.id}")
+                Log.d("AvatarRepository", "✅ Response body: $avatar")
                 Result.success(avatar)
             } else {
                 val errorBody = response.errorBody()?.string()
-                Log.e("AvatarRepository", "Create avatar failed: $errorBody")
+                Log.e("AvatarRepository", "❌ Create avatar failed with code ${response.code()}")
+                Log.e("AvatarRepository", "❌ Error body: $errorBody")
+                Log.e("AvatarRepository", "❌ Response headers: ${response.headers()}")
                 Result.failure(Exception("Failed to create avatar: ${response.code()}"))
             }
         } catch (e: Exception) {
-            Log.e("AvatarRepository", "Create avatar error", e)
+            Log.e("AvatarRepository", "❌ Create avatar exception: ${e.message}", e)
+            Log.e("AvatarRepository", "❌ Exception type: ${e.javaClass.simpleName}")
             Result.failure(e)
         }
     }

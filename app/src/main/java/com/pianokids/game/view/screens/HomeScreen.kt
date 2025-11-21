@@ -98,6 +98,24 @@ fun HomeScreen(
     val authViewModel: AuthViewModel = viewModel()
     val avatarViewModel: AvatarViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+    
+    // Snackbar and avatar states
+    val snackbarHostState = remember { SnackbarHostState() }
+    val avatarError by avatarViewModel.error.collectAsState()
+    val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
+    
+    // Show avatar error
+    LaunchedEffect(avatarError) {
+        avatarError?.let { error ->
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "Error: $error",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            avatarViewModel.clearError()
+        }
+    }
     val userName by authViewModel.userName.collectAsState()
     val user = userPrefs.getUser()
 
@@ -127,6 +145,13 @@ fun HomeScreen(
             floatOffset += 0.05f
             birdOffset += 0.3f
             kotlinx.coroutines.delay(50)
+        }
+    }
+
+    // ----- LOAD ACTIVE AVATAR -----
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn) {
+            avatarViewModel.loadActiveAvatar()
         }
     }
 
@@ -211,6 +236,8 @@ fun HomeScreen(
             CompactGameHeader(
                 userName = userName,
                 userPhotoUrl = userPhotoUrl,
+                avatarImageUrl = activeAvatar?.avatarImageUrl,
+                avatarName = activeAvatar?.name,
                 totalStars = totalStars,
                 maxStars = levels.size * 3,
                 isLoggedIn = isLoggedIn,
@@ -337,9 +364,32 @@ fun HomeScreen(
                     showCreateAvatarDialog = false
                 },
                 onCreateAvatar = { name, avatarImageUrl ->
-                    avatarViewModel.createAvatar(name, avatarImageUrl)
                     showCreateAvatarDialog = false
+                    avatarViewModel.createAvatar(name, avatarImageUrl)
+                    
+                    // Show success message
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "✨ Avatar '$name' created successfully!",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
                 }
+            )
+        }
+        
+        // Snackbar Host
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp)
+        ) { snackbarData ->
+            Snackbar(
+                snackbarData = snackbarData,
+                containerColor = Color.White,
+                contentColor = Color(0xFF667EEA),
+                shape = RoundedCornerShape(12.dp)
             )
         }
     }
@@ -612,6 +662,8 @@ fun GuestLimitDialog(onDismiss: () -> Unit, onLoginClick: () -> Unit) {
 fun CompactGameHeader(
     userName: String,
     userPhotoUrl: String?,
+    avatarImageUrl: String?,
+    avatarName: String?,
     totalStars: Int,
     maxStars: Int,
     isLoggedIn: Boolean,
@@ -664,9 +716,11 @@ fun CompactGameHeader(
                         .clickable(onClick = onProfileClick),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (userPhotoUrl != null) {
+                    // Prioritize avatar image, then Google photo, then default emoji
+                    val displayImageUrl = avatarImageUrl ?: userPhotoUrl
+                    if (displayImageUrl != null) {
                         AsyncImage(
-                            model = userPhotoUrl,
+                            model = displayImageUrl,
                             contentDescription = "Profile",
                             modifier = Modifier.fillMaxSize().clip(CircleShape),
                             contentScale = ContentScale.Crop
@@ -691,6 +745,14 @@ fun CompactGameHeader(
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontSize = 11.sp,
                                 color = RainbowOrange
+                            )
+                        )
+                    } else if (avatarName != null) {
+                        Text(
+                            text = "Avatar: $avatarName",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                color = RainbowBlue
                             )
                         )
                     }

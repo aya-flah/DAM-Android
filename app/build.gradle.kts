@@ -120,4 +120,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
+    
+    // Chromium WebView (Modern, works better than system WebView)
+    implementation("com.google.android.gms:play-services-cronet:18.0.1")
 }

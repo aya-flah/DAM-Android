@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.ui.theme.*
@@ -67,6 +68,10 @@ fun ProfileScreen(
     val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
     val isLoadingAvatars by avatarViewModel.isLoading.collectAsState()
     val avatarError by avatarViewModel.error.collectAsState()
+    
+    // Snackbar state
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     // Load avatars when logged in
     LaunchedEffect(isLoggedIn) {
@@ -78,7 +83,12 @@ fun ProfileScreen(
     // Show error if any
     LaunchedEffect(avatarError) {
         avatarError?.let { error ->
-            // You can show a snackbar or toast here
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "Error: $error",
+                    duration = SnackbarDuration.Short
+                )
+            }
             avatarViewModel.clearError()
         }
     }
@@ -492,8 +502,18 @@ fun ProfileScreen(
                     showCreateAvatarDialog = false
                 },
                 onCreateAvatar = { name, avatarImageUrl ->
-                    avatarViewModel.createAvatar(name, avatarImageUrl)
+                    android.util.Log.d("ProfileScreen", "🎯 onCreateAvatar called - name: $name, url: $avatarImageUrl")
                     showCreateAvatarDialog = false
+                    avatarViewModel.createAvatar(name, avatarImageUrl)
+                    android.util.Log.d("ProfileScreen", "🎯 avatarViewModel.createAvatar called")
+                    
+                    // Show success message
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "✨ Avatar '$name' created successfully!",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
                 }
             )
         }
@@ -549,6 +569,21 @@ fun ProfileScreen(
                 },
                 containerColor = Color.White,
                 shape = RoundedCornerShape(24.dp)
+            )
+        }
+        
+        // Snackbar Host
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp)
+        ) { snackbarData ->
+            Snackbar(
+                snackbarData = snackbarData,
+                containerColor = Color.White,
+                contentColor = Color(0xFF667EEA),
+                shape = RoundedCornerShape(12.dp)
             )
         }
     }

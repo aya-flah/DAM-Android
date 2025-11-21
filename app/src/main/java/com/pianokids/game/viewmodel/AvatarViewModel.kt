@@ -72,10 +72,12 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
             _isLoading.value = true
             _error.value = null
             
+            Log.d("AvatarViewModel", "🎯 Creating avatar - Name: $name, URL: $avatarImageUrl")
+            
             val createDto = CreateAvatarDto(
                 name = name,
                 customization = CreateAvatarCustomizationDto(
-                    style = "default",
+                    style = "anime",  // Must be one of: anime, cartoon, pixel, realistic
                     bodyType = "medium",
                     skinTone = "medium",
                     hairstyle = "short",
@@ -89,15 +91,20 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
                 avatarImageUrl = avatarImageUrl
             )
             
+            Log.d("AvatarViewModel", "🎯 DTO created: $createDto")
+            Log.d("AvatarViewModel", "🎯 Calling repository.createAvatar...")
+            
             repository.createAvatar(createDto).fold(
                 onSuccess = { avatar ->
-                    Log.d("AvatarViewModel", "Avatar created: ${avatar.name}")
+                    Log.d("AvatarViewModel", "✅ Avatar created successfully: ${avatar.name}, ID: ${avatar.id}")
+                    Log.d("AvatarViewModel", "✅ Avatar image URL: ${avatar.avatarImageUrl}")
                     // Reload avatars to refresh the list
                     loadUserAvatars()
                 },
                 onFailure = { exception ->
                     _error.value = exception.message
-                    Log.e("AvatarViewModel", "Failed to create avatar", exception)
+                    Log.e("AvatarViewModel", "❌ Failed to create avatar: ${exception.message}", exception)
+                    Log.e("AvatarViewModel", "❌ Exception type: ${exception.javaClass.simpleName}")
                 }
             )
             
