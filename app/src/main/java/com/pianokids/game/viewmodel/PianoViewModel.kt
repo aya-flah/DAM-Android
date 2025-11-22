@@ -20,6 +20,17 @@ class PianoViewModel(application: Application) : AndroidViewModel(application) {
     private val _pianoState = MutableStateFlow(PianoState())
     val pianoState: StateFlow<PianoState> = _pianoState.asStateFlow()
     
+    // Batman-themed solfege names
+    private val batmanSolfege = mapOf(
+        "Do" to "BAT",
+        "Ré" to "DARK",
+        "Mi" to "KNIGHT",
+        "Fa" to "HERO",
+        "Sol" to "GOTHAM",
+        "La" to "CAPE",
+        "Si" to "SIGNAL"
+    )
+    
     /**
      * Initialize piano for a specific level
      */
@@ -143,6 +154,17 @@ class PianoViewModel(application: Application) : AndroidViewModel(application) {
     }
     
     /**
+     * Get themed solfege name for Batman level
+     */
+    fun getThemedSolfege(solfege: String, theme: LevelTheme): String {
+        return if (theme == LevelTheme.BATMAN) {
+            batmanSolfege[solfege] ?: solfege
+        } else {
+            solfege
+        }
+    }
+    
+    /**
      * Switch between Free Play and Lesson mode
      */
     fun setGameMode(mode: GameMode) {
@@ -173,12 +195,26 @@ class PianoViewModel(application: Application) : AndroidViewModel(application) {
             LevelTheme.BATMAN -> PianoConfig(
                 levelTheme = theme,
                 noteType = NoteType.SOLFEGE,
-                whiteKeyColors = rainbowColors(),
+                whiteKeyColors = listOf(
+                    Color(0xFF1A1A1A), // Dark gray/black
+                    Color(0xFF2C2C2C),
+                    Color(0xFF3D3D3D),
+                    Color(0xFFFFD700), // Gold accent
+                    Color(0xFF1A1A1A),
+                    Color(0xFF2C2C2C),
+                    Color(0xFF3D3D3D),
+                    Color(0xFFFFD700),
+                    Color(0xFF1A1A1A),
+                    Color(0xFF2C2C2C),
+                    Color(0xFF3D3D3D),
+                    Color(0xFFFFD700)
+                ),
                 highlightColor = Color(0xFFFFD700), // Gold
                 showBatSignal = true,
                 backgroundGradient = listOf(
-                    Color(0xFF2D1B4E),
-                    Color(0xFF4A2C5E)
+                    Color(0xFF0A0A0A),
+                    Color(0xFF1A1A1A),
+                    Color(0xFF2D1B4E)
                 )
             )
             LevelTheme.SPIDERMAN -> PianoConfig(

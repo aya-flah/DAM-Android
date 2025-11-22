@@ -22,6 +22,7 @@ data class PianoKey(
 data class PianoConfig(
     val levelTheme: LevelTheme = LevelTheme.BATMAN,
     val noteType: NoteType = NoteType.SOLFEGE,
+    val instrument: InstrumentType = InstrumentType.PIANO,
     val whiteKeyColors: List<Color> = rainbowColors(),
     val blackKeyColor: Color = Color(0xFF2C2C2C),
     val highlightColor: Color = Color(0xFFFFD700),
@@ -52,6 +53,18 @@ enum class LevelTheme {
 enum class NoteType {
     SOLFEGE,  // Do, Ré, Mi, Fa, Sol, La, Si
     LETTER    // C, D, E, F, G, A, B
+}
+
+/**
+ * Instrument types for different sound sets
+ */
+enum class InstrumentType {
+    PIANO,      // Classic piano sound
+    GUITAR,     // Acoustic guitar
+    VIOLIN,     // Violin/strings
+    FLUTE,      // Flute/woodwind
+    XYLOPHONE,  // Xylophone/percussion
+    SYNTH       // Synthesizer/electronic
 }
 
 /**

@@ -10,6 +10,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.pianokids.game.utils.SoundManager
+import com.pianokids.game.utils.PianoSoundManager
 import com.pianokids.game.utils.components.LevelIntroDialog
 import com.pianokids.game.viewmodel.LevelViewModel
 import com.pianokids.game.R
@@ -440,42 +443,131 @@ fun LevelScreen(
                         "🎉"
                     }
 
+                    // Batman-themed solfege mapping
+                    val batmanSolfege = mapOf(
+                        "Do" to "🦇 BAT",
+                        "Ré" to "🌃 DARK",
+                        "Mi" to "⚔️ KNIGHT",
+                        "Fa" to "🦸 HERO",
+                        "Sol" to "🏙️ GOTHAM",
+                        "La" to "🧥 CAPE",
+                        "Si" to "💡 SIGNAL"
+                    )
+                    
+                    val displayNote = if (level.theme == "Batman") {
+                        batmanSolfege[nextNoteText] ?: nextNoteText
+                    } else {
+                        nextNoteText
+                    }
+                    
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Next Note",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium
+                            text = if (level.theme == "Batman") "PLAY THE SIGNAL" else "Next Note",
+                            color = if (level.theme == "Batman") Color(0xFFFFD700) else Color.White.copy(alpha = 0.7f),
+                            fontSize = if (level.theme == "Batman") 16.sp else 14.sp,
+                            fontWeight = FontWeight.Bold
                         )
+
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Box(
                             modifier = Modifier
                                 .scale(pulseScale)
-                                .shadow(16.dp, CircleShape)
+                                .shadow(16.dp, RoundedCornerShape(20.dp))
                                 .background(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            Color(0xFF667EEA),
-                                            Color(0xFF764BA2)
+                                    brush = if (level.theme == "Batman") {
+                                        Brush.linearGradient(
+                                            colors = listOf(
+                                                Color(0xFF1A1A1A),
+                                                Color(0xFF2C2C2C),
+                                                Color(0xFFFFD700).copy(alpha = 0.3f)
+                                            )
                                         )
-                                    ),
-                                    shape = CircleShape
+                                    } else {
+                                        Brush.radialGradient(
+                                            colors = listOf(
+                                                Color(0xFF667EEA),
+                                                Color(0xFF764BA2)
+                                            )
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(20.dp)
                                 )
-                                .padding(24.dp)
+                                .border(
+                                    width = 2.dp,
+                                    color = if (level.theme == "Batman") Color(0xFFFFD700) else Color.Transparent,
+                                    shape = RoundedCornerShape(20.dp)
+                                )
+                                .padding(horizontal = 32.dp, vertical = 20.dp)
                         ) {
                             Text(
-                                text = nextNoteText,
-                                color = Color.White,
-                                fontSize = 36.sp,
-                                fontWeight = FontWeight.Bold
+                                text = displayNote,
+                                color = if (level.theme == "Batman") Color(0xFFFFD700) else Color.White,
+                                fontSize = if (level.theme == "Batman") 28.sp else 36.sp,
+                                fontWeight = FontWeight.ExtraBold
                             )
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
+
+                // --------------------------
+                // INSTRUMENT SELECTOR
+                // --------------------------
+                var selectedInstrument by remember { mutableStateOf("PIANO") }
+                val instruments = listOf("PIANO", "GUITAR", "VIOLIN", "FLUTE", "XYLOPHONE", "SYNTH")
+                val instrumentIcons = mapOf(
+                    "PIANO" to "🎹",
+                    "GUITAR" to "🎸",
+                    "VIOLIN" to "🎻",
+                    "FLUTE" to "🪈",
+                    "XYLOPHONE" to "🎼",
+                    "SYNTH" to "🎛️"
+                )
+                
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                ) {
+                    items(instruments) { instrument ->
+                        val isSelected = instrument == selectedInstrument
+                        Button(
+                            onClick = {
+                                selectedInstrument = instrument
+                                PianoSoundManager.setInstrument(instrument)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSelected) Color(0xFF667EEA) else Color(0xFF2C2C2C),
+                                contentColor = Color.White
+                            ),
+                            modifier = Modifier
+                                .height(56.dp)
+                                .shadow(if (isSelected) 8.dp else 2.dp, RoundedCornerShape(12.dp))
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(
+                                    text = instrumentIcons[instrument] ?: "🎵",
+                                    fontSize = 20.sp
+                                )
+                                Text(
+                                    text = instrument,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // --------------------------
                 // PIANO KEYBOARD
@@ -494,7 +586,7 @@ fun LevelScreen(
                         if (state.currentNoteIndex < level.expectedNotes.size) {
                             val expectedNote = level.expectedNotes[state.currentNoteIndex]
                             
-                            // Normalize both strings: lowercase and remove accents for comparison
+                            // Normalize function to handle accents and case
                             val normalizeString = { s: String ->
                                 s.lowercase()
                                     .replace("é", "e")
@@ -503,6 +595,7 @@ fun LevelScreen(
                                     .replace("à", "a")
                                     .replace("ù", "u")
                                     .replace("ô", "o")
+                                    .trim()
                             }
                             
                             val normalizedExpected = normalizeString(expectedNote)
@@ -512,8 +605,8 @@ fun LevelScreen(
                             if (normalizedSolfege != lastPlayedNote) {
                                 lastPlayedNote = normalizedSolfege
                                 
-                                // Send the original solfege (lowercase) to viewModel
-                                viewModel.onNotePlayed(key.solfege.lowercase())
+                                // Send normalized note to viewModel for comparison
+                                viewModel.onNotePlayed(normalizedSolfege)
                             }
                         }
                     },
@@ -558,8 +651,15 @@ fun LevelScreen(
     if (showSuccessDialog) {
         LevelCompletedDialog(
             stars = calculateStars(state.score),
+            theme = level?.theme ?: "Default",
             onDismiss = {
                 showSuccessDialog = false
+                onExit()
+            },
+            onNextLevel = {
+                showSuccessDialog = false
+                // TODO: Navigate to next level
+                // For now, just go back to map
                 onExit()
             }
         )
