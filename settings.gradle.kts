@@ -20,6 +20,12 @@ dependencyResolutionManagement {
         maven {
             url = uri("https://maven.mozilla.org/maven2/")
         }
+        maven { 
+            url = uri("https://jitpack.io")
+            content {
+                includeGroup("com.github.JorenSix")
+            }
+        }
     }
 }
 

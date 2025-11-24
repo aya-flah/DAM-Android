@@ -86,29 +86,57 @@ class MainActivity : ComponentActivity() {
                     var startDestination by remember { mutableStateOf("welcome") }
 
                     LaunchedEffect(Unit) {
+                        // Debug: Check all stored preferences
+                        Log.d("MainActivity", "=== STARTUP DEBUG ===")
+                        Log.d("MainActivity", "hasSeenWelcome: $hasSeenWelcome")
+                        Log.d("MainActivity", "authToken: ${userPrefs.getAuthToken()?.take(10)}...")
+                        Log.d("MainActivity", "providerId: ${userPrefs.getProviderId()}")
+                        Log.d("MainActivity", "isGuestMode: ${userPrefs.isGuestMode()}")
+                        Log.d("MainActivity", "userData: ${userPrefs.getUser()}")
+                        
                         // Check if user is logged in
                         val hasToken = userPrefs.hasLocalToken()
                         val isLoggedIn = if (hasToken) {
-                            authRepository.verifyToken()
+                            val verified = authRepository.verifyToken()
+                            Log.d("MainActivity", "Token verification result: $verified")
+                            // If token is invalid, clear it
+                            if (!verified) {
+                                Log.d("MainActivity", "Token invalid, clearing auth")
+                                userPrefs.clearAuth()
+                            }
+                            verified
                         } else {
                             false
                         }
 
+                        val isGuest = userPrefs.isGuestMode()
+
                         // Debug logging
-                        Log.d("MainActivity", "Has seen welcome: $hasSeenWelcome")
                         Log.d("MainActivity", "Has token: $hasToken")
                         Log.d("MainActivity", "Is logged in: $isLoggedIn")
-                        Log.d("MainActivity", "Is guest mode: ${userPrefs.isGuestMode()}")
+                        Log.d("MainActivity", "Is guest mode: $isGuest")
 
+                        // Navigation logic: only go to home if explicitly logged in or guest
                         startDestination = when {
-                            !hasSeenWelcome -> "welcome"
                             isLoggedIn -> {
-                                // Make sure guest mode is cleared if we're logged in
+                                // User has valid auth token
+                                Log.d("MainActivity", "Navigation: Going to home (logged in)")
                                 userPrefs.clearGuestMode()
                                 "home"
                             }
-                            else -> "welcome"
+                            isGuest -> {
+                                // User is in guest mode
+                                Log.d("MainActivity", "Navigation: Going to home (guest mode)")
+                                "home"
+                            }
+                            else -> {
+                                // Not logged in and not guest - show welcome
+                                Log.d("MainActivity", "Navigation: Going to welcome")
+                                "welcome"
+                            }
                         }
+                        
+                        Log.d("MainActivity", "Final destination: $startDestination")
 
                         navController.navigate(startDestination) {
                             popUpTo(0) { inclusive = true }
@@ -132,6 +160,10 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(
                                 onNavigateToProfile = { navController.navigate("profile") },
                                 onNavigateToAuth = { navController.navigate("welcome") },
+                                onNavigateBack = { 
+                                    // Don't do anything - HomeScreen is a root destination
+                                    // User should use device back button to exit app
+                                },
                                 onNavigateToLevel = { levelId, userId ->
                                     navController.navigate("level/$levelId/$userId")
                                 }

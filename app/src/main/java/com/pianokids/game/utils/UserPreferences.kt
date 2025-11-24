@@ -105,6 +105,7 @@ class UserPreferences(private val context: Context) {
             .remove(KEY_AUTH_TOKEN)
             .remove(KEY_PROVIDER_ID)
             .remove(KEY_USER_DATA)
+            .remove(KEY_AVATAR_THUMBNAIL)
             .putBoolean("is_logged_in", false)
             .putBoolean(PREF_IS_GUEST, false)
             .apply()

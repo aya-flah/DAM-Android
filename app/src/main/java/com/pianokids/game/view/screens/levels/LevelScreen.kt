@@ -34,6 +34,7 @@ import coil.compose.AsyncImage
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.PianoSoundManager
 import com.pianokids.game.utils.components.LevelIntroDialog
+import com.pianokids.game.utils.components.PianoMode
 import com.pianokids.game.viewmodel.LevelViewModel
 import com.pianokids.game.R
 import androidx.compose.ui.draw.drawBehind
@@ -42,6 +43,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import com.pianokids.game.utils.components.LevelCompletedDialog
 import com.pianokids.game.view.components.PianoKeyboard
 import com.pianokids.game.viewmodel.PianoViewModel
+import androidx.compose.ui.platform.LocalContext
+import com.pianokids.game.utils.PitchDetector
 
 @Composable
 fun LevelScreen(
@@ -50,12 +53,37 @@ fun LevelScreen(
     viewModel: LevelViewModel = viewModel(),
     onExit: () -> Unit
 ) {
+    val context = LocalContext.current
     val state = viewModel.uiState.collectAsState().value
     var showIntro by remember { mutableStateOf(true) }
+    var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
     var showSuccessDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(levelId) {
         viewModel.loadLevel(levelId)
+    }
+    
+    // Start/Stop pitch detection based on mode
+    LaunchedEffect(selectedMode, showIntro) {
+        if (selectedMode == PianoMode.REAL_PIANO && !showIntro) {
+            // Start listening when in real piano mode and all dialogs finished
+            PitchDetector.startListening(context) { detectedNote ->
+                // Normalize the detected note
+                val normalizedNote = detectedNote.lowercase()
+                    .replace("é", "e")
+                    .trim()
+                viewModel.onNotePlayed(normalizedNote)
+            }
+        }
+    }
+    
+    // Cleanup when leaving screen
+    DisposableEffect(Unit) {
+        onDispose {
+            if (PitchDetector.isActive()) {
+                PitchDetector.stopListening()
+            }
+        }
     }
 
     // LOADING
@@ -80,25 +108,7 @@ fun LevelScreen(
 
     val level = state.currentLevel
 
-    // -------------------------------------------------------------
-    // INTRO DIALOG
-    // -------------------------------------------------------------
-    if (showIntro) {
-        LevelIntroDialog(
-            heroImageRes = if (level.theme == "Batman") {
-                R.drawable.hero_batman
-            } else {
-                R.drawable.hero_spiderman
-            },
-            storyText = level.story,
-            onFinished = {
-                showIntro = false
-                SoundManager.stopBackgroundMusic()
-            }
-        )
-    }
-
-    // ANIMATIONS
+    // ANIMATIONS (always define these)
     val shakeOffset by animateFloatAsState(
         targetValue = if (state.showWrongAnimation) 15f else 0f,
         animationSpec = tween(300, easing = LinearEasing),
@@ -137,9 +147,9 @@ fun LevelScreen(
     )
 
     // -------------------------------------------------------------
-    // MAIN UI
+    // MAIN UI - Only show when dialogs are closed
     // -------------------------------------------------------------
-    if (!showIntro) {
+    if (!showIntro && selectedMode != null) {
         Box(modifier = Modifier.fillMaxSize()) {
 
             // BACKGROUND with dark overlay for better contrast
@@ -515,18 +525,16 @@ fun LevelScreen(
                 Spacer(modifier = Modifier.weight(1f))
 
                 // --------------------------
-                // INSTRUMENT SELECTOR
+                // INSTRUMENT SELECTOR (Only for APP_PIANO mode)
                 // --------------------------
-                var selectedInstrument by remember { mutableStateOf("PIANO") }
-                val instruments = listOf("PIANO", "GUITAR", "VIOLIN", "FLUTE", "XYLOPHONE", "SYNTH")
-                val instrumentIcons = mapOf(
-                    "PIANO" to "🎹",
-                    "GUITAR" to "🎸",
-                    "VIOLIN" to "🎻",
-                    "FLUTE" to "🪈",
-                    "XYLOPHONE" to "🎼",
-                    "SYNTH" to "🎛️"
-                )
+                if (selectedMode == PianoMode.APP_PIANO) {
+                    var selectedInstrument by remember { mutableStateOf("PIANO") }
+                    val instruments = listOf("PIANO", "GUITAR", "VIOLIN")
+                    val instrumentIcons = mapOf(
+                        "PIANO" to "🎹",
+                        "GUITAR" to "🎸",
+                        "VIOLIN" to "🎻"
+                    )
                 
                 LazyRow(
                     modifier = Modifier
@@ -567,14 +575,16 @@ fun LevelScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
                 // --------------------------
-                // PIANO KEYBOARD
+                // PIANO KEYBOARD (Only for APP_PIANO mode)
                 // --------------------------
-                val pianoViewModel: PianoViewModel = viewModel()
-                var pressedKeys by remember { mutableStateOf(setOf<String>()) }
-                var lastPlayedNote by remember { mutableStateOf("") }
+                if (selectedMode == PianoMode.APP_PIANO) {
+                    val pianoViewModel: PianoViewModel = viewModel()
+                    var pressedKeys by remember { mutableStateOf(setOf<String>()) }
+                    var lastPlayedNote by remember { mutableStateOf("") }
                 
                 PianoKeyboard(
                     config = pianoViewModel.pianoState.collectAsState().value.config,
@@ -625,6 +635,93 @@ fun LevelScreen(
                             shape = RoundedCornerShape(24.dp)
                         )
                 )
+                } else if (selectedMode == PianoMode.REAL_PIANO) {
+                    // --------------------------
+                    // MICROPHONE LISTENING UI
+                    // --------------------------
+                    val detectedNote by PitchDetector.detectedNote.collectAsState()
+                    val detectedFrequency by PitchDetector.detectedFrequency.collectAsState()
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .shadow(12.dp, RoundedCornerShape(24.dp))
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFF1A1A2E).copy(alpha = 0.9f),
+                                        Color(0xFF16213E).copy(alpha = 0.9f)
+                                    )
+                                ),
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                            .border(
+                                width = 2.dp,
+                                color = Color(0xFF00D9FF).copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(24.dp)
+                            )
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            // Microphone Icon with pulsing animation
+                            val pulseScale by rememberInfiniteTransition().animateFloat(
+                                initialValue = 1f,
+                                targetValue = 1.2f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(1000, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                )
+                            )
+                            
+                            Text(
+                                text = "🎤",
+                                fontSize = 64.sp,
+                                modifier = Modifier.scale(pulseScale)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Text(
+                                text = "Play on your piano!",
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            // Real-time detection feedback
+                            if (detectedNote != null) {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color(0xFF00D9FF).copy(alpha = 0.2f)
+                                    ),
+                                    modifier = Modifier.padding(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Detected: $detectedNote (${detectedFrequency.toInt()} Hz)",
+                                        color = Color(0xFF00D9FF),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "I'm listening... 🎵",
+                                    color = Color(0xFF00D9FF).copy(alpha = 0.7f),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(30.dp))
             }
@@ -679,6 +776,27 @@ fun LevelScreen(
                 Button(onClick = onExit) {
                     Text("Exit")
                 }
+            }
+        )
+    }
+    
+    // -------------------------------------------------------------
+    // DIALOGS - Rendered on top of everything
+    // -------------------------------------------------------------
+    
+    // Intro Dialog - Shows story, then piano mode choice buttons
+    if (showIntro) {
+        LevelIntroDialog(
+            heroImageRes = if (level.theme == "Batman") {
+                R.drawable.hero_batman
+            } else {
+                R.drawable.hero_spiderman
+            },
+            storyText = level.story,
+            onModeSelected = { mode ->
+                selectedMode = mode
+                showIntro = false
+                SoundManager.stopBackgroundMusic()
             }
         )
     }

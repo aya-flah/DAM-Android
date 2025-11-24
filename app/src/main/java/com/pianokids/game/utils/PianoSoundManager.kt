@@ -53,16 +53,13 @@ object PianoSoundManager {
     private fun loadPianoSounds(context: Context) {
         soundPool?.let { pool ->
             val notes = listOf("Do", "Ré", "Mi", "Fa", "Sol", "La", "Si")
-            val instruments = listOf("PIANO", "GUITAR", "VIOLIN", "FLUTE", "XYLOPHONE", "SYNTH")
+            val instruments = listOf("PIANO", "GUITAR", "VIOLIN")
             
             // Resource name mappings for each instrument
             val resourcePrefixes = mapOf(
                 "PIANO" to "note",
                 "GUITAR" to "guitar",
-                "VIOLIN" to "violin",
-                "FLUTE" to "flute",
-                "XYLOPHONE" to "xylo",
-                "SYNTH" to "synth"
+                "VIOLIN" to "violin"
             )
             
             // Note name to resource suffix mapping

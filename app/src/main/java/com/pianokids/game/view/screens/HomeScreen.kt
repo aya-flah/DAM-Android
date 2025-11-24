@@ -3,6 +3,7 @@ package com.pianokids.game.view.screens
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -98,6 +99,11 @@ fun HomeScreen(
     val authViewModel: AuthViewModel = viewModel()
     val avatarViewModel: AvatarViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+    
+    // Handle device back button - exit app when on HomeScreen
+    BackHandler {
+        activity?.finish()
+    }
     
     // Snackbar and avatar states
     val snackbarHostState = remember { SnackbarHostState() }

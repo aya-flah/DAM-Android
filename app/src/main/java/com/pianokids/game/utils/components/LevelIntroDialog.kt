@@ -31,11 +31,12 @@ import com.pianokids.game.utils.SoundManager
 fun LevelIntroDialog(
     heroImageRes: Int,
     storyText: String,
-    onFinished: () -> Unit
+    onModeSelected: (PianoMode) -> Unit
 ) {
     var typedText by remember { mutableStateOf("") }
-    var showButton by remember { mutableStateOf(false) }
+    var showButtons by remember { mutableStateOf(false) }
     var isVisible by remember { mutableStateOf(false) }
+    var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
 
     // Entrance animation trigger
     LaunchedEffect(Unit) {
@@ -51,7 +52,7 @@ fun LevelIntroDialog(
             SoundManager.playTyping()
             delay(35)
         }
-        showButton = true
+        showButtons = true
     }
 
     // Pulsing glow animation for the card
@@ -227,82 +228,136 @@ fun LevelIntroDialog(
                                 )
                             }
 
-                            // STORY TEXT SECTION WITH BUTTON
+                            // STORY TEXT SECTION
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(280.dp)
+                                    .background(
+                                        Color(0xFFF3F9FF).copy(alpha = 0.8f),  // GameBackground
+                                        RoundedCornerShape(16.dp)
+                                    )
+                                    .padding(16.dp)
                             ) {
-                                // Story text container
-                                Box(
+                                Text(
+                                    text = typedText,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF2C3E50),  // TextDark
+                                    lineHeight = 22.sp,
+                                    textAlign = TextAlign.Start
+                                )
+                            }
+                        }
+
+                        // PIANO MODE CHOICE BUTTONS (below content area)
+                        AnimatedVisibility(
+                            visible = showButtons,
+                            enter = fadeIn() + expandVertically()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // App Piano Button
+                                OutlinedButton(
+                                    onClick = {
+                                        SoundManager.playClick()
+                                        selectedMode = PianoMode.APP_PIANO
+                                    },
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Color(0xFFF3F9FF).copy(alpha = 0.8f),  // GameBackground
-                                            RoundedCornerShape(16.dp)
-                                        )
-                                        .padding(16.dp)
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = if (selectedMode == PianoMode.APP_PIANO) 3.dp else 2.dp,
+                                        color = if (selectedMode == PianoMode.APP_PIANO) 
+                                            Color(0xFF667EEA) 
+                                        else 
+                                            Color(0xFF667EEA).copy(alpha = 0.5f)
+                                    ),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (selectedMode == PianoMode.APP_PIANO)
+                                            Color(0xFF667EEA).copy(alpha = 0.1f)
+                                        else
+                                            Color.Transparent,
+                                        contentColor = Color(0xFF667EEA)
+                                    )
                                 ) {
                                     Text(
-                                        text = typedText,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color(0xFF2C3E50),  // TextDark
-                                        lineHeight = 22.sp,
-                                        textAlign = TextAlign.Start
+                                        text = "PLAY WITH APP PIANO",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
                                     )
                                 }
 
-                                // START BUTTON (Bottom Right)
-                                if (showButton) {
-                                    Button(
-                                        onClick = onFinished,
-                                        modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .padding(12.dp)
-                                            .width(160.dp)
-                                            .height(44.dp)
-                                            .shadow(10.dp, RoundedCornerShape(12.dp)),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color.Transparent
-                                        ),
-                                        contentPadding = PaddingValues(0.dp)
+                                // Real Piano Button
+                                OutlinedButton(
+                                    onClick = {
+                                        SoundManager.playClick()
+                                        selectedMode = PianoMode.REAL_PIANO
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        width = if (selectedMode == PianoMode.REAL_PIANO) 3.dp else 2.dp,
+                                        color = if (selectedMode == PianoMode.REAL_PIANO)
+                                            Color(0xFF00D9FF)
+                                        else
+                                            Color(0xFF00D9FF).copy(alpha = 0.5f)
+                                    ),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (selectedMode == PianoMode.REAL_PIANO)
+                                            Color(0xFF00D9FF).copy(alpha = 0.1f)
+                                        else
+                                            Color.Transparent,
+                                        contentColor = Color(0xFF00D9FF)
+                                    )
+                                ) {
+                                    Text(
+                                        text = "PLAY WITH MY PIANO",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                                
+                                // START Button
+                                Button(
+                                    onClick = {
+                                        SoundManager.playClick()
+                                        selectedMode?.let { onModeSelected(it) }
+                                    },
+                                    enabled = selectedMode != null,
+                                    modifier = Modifier
+                                        .width(100.dp)
+                                        .height(56.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF64B5F6),
+                                        disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+                                    )
+                                ) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    brush = Brush.horizontalGradient(
-                                                        colors = listOf(
-                                                            Color(0xFF64B5F6),  // RainbowBlue
-                                                            Color(0xFF81C784),  // RainbowGreen
-                                                            Color(0xFFF0628A)   // RainbowPink
-                                                        )
-                                                    ),
-                                                    shape = RoundedCornerShape(12.dp)
-                                                )
-                                                .border(
-                                                    width = 2.dp,
-                                                    color = Color.Transparent,
-                                                    shape = RoundedCornerShape(12.dp)
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Row(
-                                                horizontalArrangement = Arrangement.Center,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text(
-                                                    text = "START",
-                                                    fontSize = 16.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = Color.White,
-                                                    letterSpacing = 1.sp
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text("🚀", fontSize = 16.sp)
-                                            }
-                                        }
+                                        Text(
+                                            text = "START",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        Text(
+                                            text = " 🚀",
+                                            fontSize = 16.sp
+                                        )
                                     }
                                 }
                             }
