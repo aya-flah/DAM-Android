@@ -2,6 +2,7 @@ package com.pianokids.game.utils.components
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -37,6 +39,7 @@ fun LevelIntroDialog(
     var showButtons by remember { mutableStateOf(false) }
     var isVisible by remember { mutableStateOf(false) }
     var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
+    var skipRequested by remember { mutableStateOf(false) }
 
     // Entrance animation trigger
     LaunchedEffect(Unit) {
@@ -44,9 +47,17 @@ fun LevelIntroDialog(
     }
 
     // TYPEWRITER EFFECT
-    LaunchedEffect(Unit) {
-        delay(300) // Wait for entrance animation
+    LaunchedEffect(storyText, skipRequested) {
+        if (skipRequested) {
+            typedText = storyText
+            showButtons = true
+            return@LaunchedEffect
+        }
+
+        delay(300)
         typedText = ""
+        showButtons = false
+
         for (char in storyText) {
             typedText += char
             SoundManager.playTyping()
@@ -55,7 +66,7 @@ fun LevelIntroDialog(
         showButtons = true
     }
 
-    // Pulsing glow animation for the card
+    // Pulsing glow animation
     val infiniteTransition = rememberInfiniteTransition()
     val glowAlpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
@@ -66,17 +77,18 @@ fun LevelIntroDialog(
         )
     )
 
-    // Shimmer effect for button
-    val shimmerTranslate by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        )
+    // Button hover effect simulation
+    val appPianoScale by animateFloatAsState(
+        targetValue = if (selectedMode == PianoMode.APP_PIANO) 1.02f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
     )
 
-    // BACKDROP WITH BALANCED GRADIENT
+    val realPianoScale by animateFloatAsState(
+        targetValue = if (selectedMode == PianoMode.REAL_PIANO) 1.02f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+    )
+
+    // BACKDROP WITH GRADIENT
     AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn(animationSpec = tween(500))
@@ -87,31 +99,31 @@ fun LevelIntroDialog(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF87CEEB).copy(alpha = 0.5f),  // SkyBlue
-                            Color(0xFF64B5F6).copy(alpha = 0.6f),  // RainbowBlue
-                            Color(0xFF2C3E50).copy(alpha = 0.7f)   // TextDark
+                            Color(0xFF1A237E).copy(alpha = 0.6f),
+                            Color(0xFF283593).copy(alpha = 0.7f),
+                            Color(0xFF1A1A2E).copy(alpha = 0.8f)
                         )
                     )
                 ),
             contentAlignment = Alignment.Center
         ) {
 
-            // Animated particles/stars in background
+            // Animated background particles
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        Brush.verticalGradient(
+                        Brush.radialGradient(
                             colors = listOf(
-                                Color(0xFF64B5F6).copy(alpha = glowAlpha * 0.2f),  // RainbowBlue
+                                Color(0xFF667EEA).copy(alpha = glowAlpha * 0.15f),
                                 Color.Transparent,
-                                Color(0xFF81C784).copy(alpha = glowAlpha * 0.2f)   // RainbowGreen
+                                Color(0xFF00D9FF).copy(alpha = glowAlpha * 0.15f)
                             )
                         )
                     )
             )
 
-            // MAIN CARD WITH SCALE ANIMATION
+            // MAIN CARD
             AnimatedVisibility(
                 visible = isVisible,
                 enter = scaleIn(
@@ -123,86 +135,106 @@ fun LevelIntroDialog(
             ) {
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth(0.88f)
+                        .fillMaxWidth(0.90f)
                         .wrapContentHeight()
-                        .shadow(
-                            elevation = 20.dp,
-                            shape = RoundedCornerShape(28.dp),
-                            spotColor = Color(0xFF64B5F6).copy(alpha = 0.5f)  // RainbowBlue
-                        )
                         .border(
                             width = 2.dp,
                             brush = Brush.linearGradient(
                                 colors = listOf(
-                                    Color(0xFF64B5F6).copy(alpha = glowAlpha),  // RainbowBlue
-                                    Color(0xFF81C784).copy(alpha = glowAlpha),  // RainbowGreen
-                                    Color(0xFFF0628A).copy(alpha = glowAlpha)   // RainbowPink
+                                    Color(0xFF667EEA).copy(alpha = glowAlpha),
+                                    Color(0xFF00D9FF).copy(alpha = glowAlpha),
+                                    Color(0xFF64B5F6).copy(alpha = glowAlpha)
                                 )
                             ),
-                            shape = RoundedCornerShape(28.dp)
+                            shape = RoundedCornerShape(32.dp)
                         )
-                        .clip(RoundedCornerShape(28.dp)),
+                        .clip(RoundedCornerShape(32.dp)),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFFFFFF).copy(alpha = 0.95f)  // CardBackground with slight transparency
+                        containerColor = Color(0xFFFAFAFA)
                     ),
                     elevation = CardDefaults.cardElevation(0.dp)
                 ) {
 
                     Column(
                         modifier = Modifier
-                            .padding(24.dp)
+                            .padding(28.dp)
                             .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
 
-                        // TITLE/HEADER
+                        // HEADER WITH SKIP BUTTON
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "MISSION BRIEFING",
-                                fontSize = 22.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.tertiary,  // TextDark
-                                letterSpacing = 1.5.sp
-                            )
+                            // Title
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Start
+                            ) {
+                                Text(
+                                    text = "🎯",
+                                    fontSize = 24.sp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "MISSION BRIEFING",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF2C3E50),
+                                    letterSpacing = 2.sp
+                                )
+                            }
+
+                            // Skip button
+                            TextButton(
+                                onClick = { skipRequested = true },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = Color(0xFF667EEA)
+                                )
+                            ) {
+                                Text(
+                                    text = "Skip ⏭",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
 
                         Divider(
-                            color = Color(0xFF64B5F6).copy(alpha = 0.3f),  // RainbowBlue
-                            thickness = 1.dp
+                            color = Color(0xFF667EEA).copy(alpha = 0.2f),
+                            thickness = 2.dp
                         )
 
                         // CONTENT AREA
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(24.dp),
                             verticalAlignment = Alignment.Top
                         ) {
 
-                            // HERO IMAGE WITH GLOW
+                            // HERO IMAGE WITH ENHANCED GLOW
                             Box(
                                 modifier = Modifier
-                                    .width(200.dp)
-                                    .height(280.dp)
+                                    .width(220.dp)
+                                    .height(300.dp)
                             ) {
-                                // Glow effect behind image
+                                // Multi-layer glow effect
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .offset(y = 6.dp)
+                                        .offset(y = 8.dp)
                                         .background(
                                             brush = Brush.verticalGradient(
                                                 colors = listOf(
-                                                    Color(0xFF64B5F6).copy(alpha = glowAlpha * 0.5f),  // RainbowBlue
-                                                    Color(0xFF81C784).copy(alpha = glowAlpha * 0.3f),  // RainbowGreen
+                                                    Color(0xFF667EEA).copy(alpha = glowAlpha * 0.6f),
+                                                    Color(0xFF00D9FF).copy(alpha = glowAlpha * 0.4f),
                                                     Color.Transparent
                                                 )
                                             ),
-                                            shape = RoundedCornerShape(20.dp)
+                                            shape = RoundedCornerShape(24.dp)
                                         )
                                 )
 
@@ -212,18 +244,17 @@ fun LevelIntroDialog(
                                     contentDescription = "Hero",
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .shadow(12.dp, RoundedCornerShape(20.dp))
                                         .border(
-                                            width = 3.dp,
+                                            width = 4.dp,
                                             brush = Brush.verticalGradient(
                                                 colors = listOf(
-                                                    Color(0xFF64B5F6),  // RainbowBlue
-                                                    Color(0xFF81C784)   // RainbowGreen
+                                                    Color(0xFF667EEA),
+                                                    Color(0xFF00D9FF)
                                                 )
                                             ),
-                                            shape = RoundedCornerShape(20.dp)
+                                            shape = RoundedCornerShape(24.dp)
                                         )
-                                        .clip(RoundedCornerShape(20.dp)),
+                                        .clip(RoundedCornerShape(24.dp)),
                                     contentScale = ContentScale.Crop
                                 )
                             }
@@ -232,103 +263,222 @@ fun LevelIntroDialog(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(280.dp)
+                                    .height(300.dp)
                                     .background(
-                                        Color(0xFFF3F9FF).copy(alpha = 0.8f),  // GameBackground
-                                        RoundedCornerShape(16.dp)
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFFF8F9FA),
+                                                Color(0xFFE8EAF6).copy(alpha = 0.5f)
+                                            )
+                                        ),
+                                        RoundedCornerShape(20.dp)
                                     )
-                                    .padding(16.dp)
+                                    .border(
+                                        width = 1.dp,
+                                        color = Color(0xFF667EEA).copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(20.dp)
+                                    )
+                                    .padding(20.dp)
                             ) {
                                 Text(
                                     text = typedText,
-                                    fontSize = 16.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF2C3E50),  // TextDark
-                                    lineHeight = 22.sp,
+                                    color = Color(0xFF2C3E50),
+                                    lineHeight = 24.sp,
                                     textAlign = TextAlign.Start
                                 )
                             }
                         }
 
-                        // PIANO MODE CHOICE BUTTONS (below content area)
+                        // ENHANCED PIANO MODE SELECTION
                         AnimatedVisibility(
                             visible = showButtons,
-                            enter = fadeIn() + expandVertically()
+                            enter = fadeIn(animationSpec = tween(400)) +
+                                    expandVertically(animationSpec = tween(400))
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                // App Piano Button
-                                OutlinedButton(
-                                    onClick = {
-                                        SoundManager.playClick()
-                                        selectedMode = PianoMode.APP_PIANO
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        width = if (selectedMode == PianoMode.APP_PIANO) 3.dp else 2.dp,
-                                        color = if (selectedMode == PianoMode.APP_PIANO) 
-                                            Color(0xFF667EEA) 
-                                        else 
-                                            Color(0xFF667EEA).copy(alpha = 0.5f)
-                                    ),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = if (selectedMode == PianoMode.APP_PIANO)
-                                            Color(0xFF667EEA).copy(alpha = 0.1f)
-                                        else
-                                            Color.Transparent,
-                                        contentColor = Color(0xFF667EEA)
-                                    )
+                                // Section header
+                                Text(
+                                    text = "Choose Your Instrument",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2C3E50),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+
+                                // Mode selection buttons
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Text(
-                                        text = "PLAY WITH APP PIANO",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center
-                                    )
+                                    // APP PIANO CARD
+                                    Card(
+                                        onClick = {
+                                            SoundManager.playClick()
+                                            selectedMode = PianoMode.APP_PIANO
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(140.dp)
+                                            .scale(appPianoScale),
+                                        shape = RoundedCornerShape(20.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (selectedMode == PianoMode.APP_PIANO)
+                                                Color(0xFF667EEA)
+                                            else
+                                                Color(0xFFFFFFFF)
+                                        ),
+                                        elevation = CardDefaults.cardElevation(
+                                            defaultElevation = 0.dp
+                                        ),
+                                        border = BorderStroke(
+                                            width = if (selectedMode == PianoMode.APP_PIANO) 3.dp else 2.dp,
+                                            color = if (selectedMode == PianoMode.APP_PIANO)
+                                                Color(0xFF667EEA)
+                                            else
+                                                Color(0xFF667EEA).copy(alpha = 0.3f)
+                                        )
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    if (selectedMode == PianoMode.APP_PIANO)
+                                                        Brush.verticalGradient(
+                                                            colors = listOf(
+                                                                Color(0xFF667EEA),
+                                                                Color(0xFF764BA2)
+                                                            )
+                                                        )
+                                                    else
+                                                        Brush.verticalGradient(
+                                                            colors = listOf(
+                                                                Color(0xFFFFFFFF),
+                                                                Color(0xFFF5F7FA)
+                                                            )
+                                                        )
+                                                )
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Text(
+                                                    text = "🎹",
+                                                    fontSize = 48.sp
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = "App Piano",
+                                                    fontSize = 18.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (selectedMode == PianoMode.APP_PIANO)
+                                                        Color.White
+                                                    else
+                                                        Color(0xFF667EEA)
+                                                )
+                                                Text(
+                                                    text = "Virtual keys",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = if (selectedMode == PianoMode.APP_PIANO)
+                                                        Color.White.copy(alpha = 0.9f)
+                                                    else
+                                                        Color(0xFF667EEA).copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // REAL PIANO CARD
+                                    Card(
+                                        onClick = {
+                                            SoundManager.playClick()
+                                            selectedMode = PianoMode.REAL_PIANO
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(140.dp)
+                                            .scale(realPianoScale),
+                                        shape = RoundedCornerShape(20.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (selectedMode == PianoMode.REAL_PIANO)
+                                                Color(0xFF00D9FF)
+                                            else
+                                                Color(0xFFFFFFFF)
+                                        ),
+                                        elevation = CardDefaults.cardElevation(
+                                            defaultElevation = 0.dp
+                                        ),
+                                        border = BorderStroke(
+                                            width = if (selectedMode == PianoMode.REAL_PIANO) 3.dp else 2.dp,
+                                            color = if (selectedMode == PianoMode.REAL_PIANO)
+                                                Color(0xFF00D9FF)
+                                            else
+                                                Color(0xFF00D9FF).copy(alpha = 0.3f)
+                                        )
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(
+                                                    if (selectedMode == PianoMode.REAL_PIANO)
+                                                        Brush.verticalGradient(
+                                                            colors = listOf(
+                                                                Color(0xFF00D9FF),
+                                                                Color(0xFF0099CC)
+                                                            )
+                                                        )
+                                                    else
+                                                        Brush.verticalGradient(
+                                                            colors = listOf(
+                                                                Color(0xFFFFFFFF),
+                                                                Color(0xFFF5F7FA)
+                                                            )
+                                                        )
+                                                )
+                                                .padding(16.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                verticalArrangement = Arrangement.Center
+                                            ) {
+                                                Text(
+                                                    text = "🎼",
+                                                    fontSize = 48.sp
+                                                )
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Text(
+                                                    text = "My Piano",
+                                                    fontSize = 18.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (selectedMode == PianoMode.REAL_PIANO)
+                                                        Color.White
+                                                    else
+                                                        Color(0xFF00D9FF)
+                                                )
+                                                Text(
+                                                    text = "Physical keyboard",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = if (selectedMode == PianoMode.REAL_PIANO)
+                                                        Color.White.copy(alpha = 0.9f)
+                                                    else
+                                                        Color(0xFF00D9FF).copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
 
-                                // Real Piano Button
-                                OutlinedButton(
-                                    onClick = {
-                                        SoundManager.playClick()
-                                        selectedMode = PianoMode.REAL_PIANO
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(56.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    border = androidx.compose.foundation.BorderStroke(
-                                        width = if (selectedMode == PianoMode.REAL_PIANO) 3.dp else 2.dp,
-                                        color = if (selectedMode == PianoMode.REAL_PIANO)
-                                            Color(0xFF00D9FF)
-                                        else
-                                            Color(0xFF00D9FF).copy(alpha = 0.5f)
-                                    ),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = if (selectedMode == PianoMode.REAL_PIANO)
-                                            Color(0xFF00D9FF).copy(alpha = 0.1f)
-                                        else
-                                            Color.Transparent,
-                                        contentColor = Color(0xFF00D9FF)
-                                    )
-                                ) {
-                                    Text(
-                                        text = "PLAY WITH MY PIANO",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                                
-                                // START Button
+                                // START BUTTON
                                 Button(
                                     onClick = {
                                         SoundManager.playClick()
@@ -336,12 +486,17 @@ fun LevelIntroDialog(
                                     },
                                     enabled = selectedMode != null,
                                     modifier = Modifier
-                                        .width(100.dp)
-                                        .height(56.dp),
+                                        .fillMaxWidth()
+                                        .height(64.dp),
                                     shape = RoundedCornerShape(16.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF64B5F6),
-                                        disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+                                        containerColor = Color(0xFF4CAF50),
+                                        disabledContainerColor = Color(0xFFBDBDBD)
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(
+                                        defaultElevation = 0.dp,
+                                        pressedElevation = 0.dp,
+                                        disabledElevation = 0.dp
                                     )
                                 ) {
                                     Row(
@@ -349,39 +504,51 @@ fun LevelIntroDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "START",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            text = "START MISSION",
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White,
+                                            letterSpacing = 1.5.sp
                                         )
+                                        Spacer(modifier = Modifier.width(12.dp))
                                         Text(
-                                            text = " 🚀",
-                                            fontSize = 16.sp
+                                            text = "🚀",
+                                            fontSize = 24.sp
                                         )
                                     }
                                 }
                             }
                         }
 
-                        // BOTTOM DECORATIVE HINT
+                        // BOTTOM HINT
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(
-                                    Color(0xFFF3F9FF).copy(alpha = 0.8f),  // GameBackground
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color(0xFFFFF9C4).copy(alpha = 0.8f),
+                                            Color(0xFFFFE082).copy(alpha = 0.8f)
+                                        )
+                                    ),
                                     RoundedCornerShape(12.dp)
                                 )
-                                .padding(10.dp),
+                                .border(
+                                    width = 1.dp,
+                                    color = Color(0xFFFFD54F).copy(alpha = 0.5f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .padding(12.dp),
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("💡", fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("💡", fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Listen carefully and play the correct notes to win!",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF64B5F6),  // RainbowBlue
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFF57C00),
                                 textAlign = TextAlign.Center
                             )
                         }

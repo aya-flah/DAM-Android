@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.pianokids.game.data.models.*
 import com.pianokids.game.data.repository.AvatarRepository
+import com.pianokids.game.utils.UserPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,7 +14,8 @@ import kotlinx.coroutines.launch
 
 class AvatarViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = AvatarRepository(application)
-    
+    private val userPrefs = UserPreferences(application) // ✅ add this
+
     private val _avatars = MutableStateFlow<List<Avatar>>(emptyList())
     val avatars: StateFlow<List<Avatar>> = _avatars.asStateFlow()
     
@@ -25,16 +27,23 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
     
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
-    
+
     fun loadUserAvatars() {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            
+
             repository.getUserAvatars().fold(
                 onSuccess = { avatarList ->
                     _avatars.value = avatarList
-                    _activeAvatar.value = avatarList.firstOrNull { it.isActive }
+                    val active = avatarList.firstOrNull { it.isActive }
+                    _activeAvatar.value = active
+
+                    // ✅ Save thumbnail if present
+                    active?.avatarImageUrl
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { userPrefs.saveAvatarThumbnail(it) }
+
                     Log.d("AvatarViewModel", "Loaded ${avatarList.size} avatars")
                 },
                 onFailure = { exception ->
@@ -42,19 +51,25 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
                     Log.e("AvatarViewModel", "Failed to load avatars", exception)
                 }
             )
-            
+
             _isLoading.value = false
         }
     }
-    
+
     fun loadActiveAvatar() {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            
+
             repository.getActiveAvatar().fold(
                 onSuccess = { avatar ->
                     _activeAvatar.value = avatar
+
+                    // ✅ Save thumbnail here too
+                    avatar.avatarImageUrl
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { userPrefs.saveAvatarThumbnail(it) }
+
                     Log.d("AvatarViewModel", "Loaded active avatar: ${avatar.name}")
                 },
                 onFailure = { exception ->
@@ -62,7 +77,7 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
                     Log.e("AvatarViewModel", "Failed to load active avatar", exception)
                 }
             )
-            
+
             _isLoading.value = false
         }
     }
@@ -111,17 +126,22 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
             _isLoading.value = false
         }
     }
-    
+
     fun setActiveAvatar(avatarId: String) {
         viewModelScope.launch {
             _isLoading.value = true
             _error.value = null
-            
+
             repository.setActiveAvatar(avatarId).fold(
                 onSuccess = { avatar ->
                     _activeAvatar.value = avatar
+
+                    // ✅ Save thumbnail whenever active avatar changes
+                    avatar.avatarImageUrl
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { userPrefs.saveAvatarThumbnail(it) }
+
                     Log.d("AvatarViewModel", "Active avatar set: ${avatar.name}")
-                    // Reload avatars to update active status
                     loadUserAvatars()
                 },
                 onFailure = { exception ->
@@ -129,7 +149,7 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
                     Log.e("AvatarViewModel", "Failed to set active avatar", exception)
                 }
             )
-            
+
             _isLoading.value = false
         }
     }

@@ -1,4 +1,3 @@
-
 package com.pianokids.game.view.screens
 
 import android.annotation.SuppressLint
@@ -99,17 +98,17 @@ fun HomeScreen(
     val authViewModel: AuthViewModel = viewModel()
     val avatarViewModel: AvatarViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
-    
+
     // Handle device back button - exit app when on HomeScreen
     BackHandler {
         activity?.finish()
     }
-    
+
     // Snackbar and avatar states
     val snackbarHostState = remember { SnackbarHostState() }
     val avatarError by avatarViewModel.error.collectAsState()
     val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
-    
+
     // Show avatar error
     LaunchedEffect(avatarError) {
         avatarError?.let { error ->
@@ -215,15 +214,6 @@ fun HomeScreen(
             birdOffset = birdOffset
         )
 
-        // path
-        LevelPathCanvas(
-            levels = levels,
-            progressMap = progressMap
-        )
-
-        // Background ocean
-        OceanMapBackground(waveOffset = waveOffset, cloudOffset = cloudOffset, birdOffset= birdOffset)
-
         // Loading overlay
         if (isLoading) {
             Box(
@@ -323,7 +313,6 @@ fun HomeScreen(
                     )
                 },
 
-// For Facebook login:
                 onFacebookClick = {
                     activity?.let { act ->
                         isLoading = true
@@ -372,7 +361,7 @@ fun HomeScreen(
                 onCreateAvatar = { name, avatarImageUrl ->
                     showCreateAvatarDialog = false
                     avatarViewModel.createAvatar(name, avatarImageUrl)
-                    
+
                     // Show success message
                     scope.launch {
                         snackbarHostState.showSnackbar(
@@ -383,7 +372,7 @@ fun HomeScreen(
                 }
             )
         }
-        
+
         // Snackbar Host
         SnackbarHost(
             hostState = snackbarHostState,
@@ -404,17 +393,38 @@ fun HomeScreen(
 
 
 // -------------------------------------------------------------
-// MAP ISLAND
+// MAP ISLAND - WITH SOLUTION 1 POSITIONING
 // -------------------------------------------------------------
 @Composable
 fun MapIsland(
     level: Level,
     isUnlocked: Boolean,
-    stars: Int,                // ⭐ Stars passed from progressMap
+    stars: Int,
     floatOffset: Float,
     onClick: () -> Unit
 ) {
-    val pos = level.getEffectivePosition(level.order)
+    // SOLUTION 1: Specific positions for nice winding path
+    val pos = when (level.order) {
+        1 -> Offset(0.15f, 0.65f)   // Bottom left - First island
+        2 -> Offset(0.35f, 0.45f)   // Middle left - slightly up
+        3 -> Offset(0.55f, 0.25f)   // Upper middle - going up
+        4 -> Offset(0.75f, 0.35f)   // Upper right - slight down
+        5 -> Offset(0.95f, 0.55f)   // Right side - going down
+        6 -> Offset(1.15f, 0.40f)   // Far right - middle height
+        7 -> Offset(1.35f, 0.60f)   // Further right - lower
+        8 -> Offset(1.55f, 0.30f)   // Even further - up again
+        else -> {
+            // Fallback for any additional levels
+            // Creates a diagonal pattern
+            val row = (level.order - 1) / 4
+            val col = (level.order - 1) % 4
+            Offset(
+                x = 0.15f + col * 0.25f + (row % 2) * 0.12f,
+                y = 0.65f - row * 0.20f
+            )
+        }
+    }
+
     val floatY = sin(floatOffset + level.order * 0.5) * 8f
 
     Box(
@@ -635,7 +645,7 @@ fun OceanMapBackground(
 }
 
 // -------------------------------------------------------------
-// DIALOGS (unchanged)
+// DIALOGS
 // -------------------------------------------------------------
 @Composable
 fun ComingSoonDialog(onDismiss: () -> Unit) {
@@ -818,87 +828,3 @@ fun CompactGameHeader(
         }
     }
 }
-
-@SuppressLint("RestrictedApi")
-@Composable
-fun LevelPathCanvas(
-    levels: List<Level>,
-    progressMap: Map<String, UnlockedLevelItem>
-) {
-    if (levels.isEmpty()) return
-
-    val sorted = levels.sortedBy { it.order }
-
-    val points = sorted.mapIndexed { index, lvl ->
-        val pos = lvl.getEffectivePosition(index)
-        Offset(
-            x = pos.x * 1600f,
-            y = pos.y * 1400f
-        )
-    }
-
-    val unlockedCount = progressMap.values.count { it.unlocked }
-
-    // ---- Animated reveal value ----
-    val revealProgress by animateFloatAsState(
-        targetValue = unlockedCount.toFloat(),
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing)
-    )
-
-    Canvas(
-        modifier = Modifier
-            .fillMaxSize()
-    ) {
-
-        if (points.size < 2) return@Canvas
-
-        // ---------- 1) BASE GREY PATH (always visible) ----------
-        for (i in 0 until points.size - 1) {
-            drawLine(
-                color = Color.LightGray.copy(alpha = 0.35f),
-                start = points[i],
-                end = points[i + 1],
-                strokeWidth = 22f,
-                cap = StrokeCap.Round
-            )
-        }
-
-        // ---------- 2) GLOWING PATH FOR UNLOCKED AREAS ----------
-        for (i in 0 until points.size - 1) {
-
-            if (revealProgress <= i) break  // Don't draw beyond animation
-
-            val endFraction =
-                when {
-                    revealProgress > i + 1 -> 1f  // fully revealed
-                    revealProgress > i -> revealProgress - i  // partial glowing segment
-                    else -> 0f
-                }
-
-            val start = points[i]
-            val end = points[i + 1]
-
-            val partialEnd = Offset(
-                x = lerp(start.x, end.x, endFraction),
-                y = lerp(start.y, end.y, endFraction)
-            )
-
-            drawLine(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFF00F7FF),
-                        Color(0xFF00CFFF),
-                        Color(0x0000CFFF)
-                    ),
-                    center = start,
-                    radius = 300f
-                ),
-                start = start,
-                end = partialEnd,
-                strokeWidth = 28f,
-                cap = StrokeCap.Round
-            )
-        }
-    }
-}
-

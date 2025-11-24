@@ -45,24 +45,33 @@ import com.pianokids.game.view.components.PianoKeyboard
 import com.pianokids.game.viewmodel.PianoViewModel
 import androidx.compose.ui.platform.LocalContext
 import com.pianokids.game.utils.PitchDetector
+import com.pianokids.game.utils.UserPreferences
+import com.pianokids.game.utils.components.AvatarImageView
+import android.util.Log
+import com.pianokids.game.viewmodel.AvatarViewModel
 
 @Composable
 fun LevelScreen(
     userId: String,
     levelId: String,
     viewModel: LevelViewModel = viewModel(),
+    avatarViewModel: AvatarViewModel = viewModel(),  // ✅ add this
     onExit: () -> Unit
 ) {
     val context = LocalContext.current
+    val userPrefs = remember { UserPreferences(context) }
     val state = viewModel.uiState.collectAsState().value
+    val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
     var showIntro by remember { mutableStateOf(true) }
     var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
     var showSuccessDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(levelId) {
+
+    LaunchedEffect(userId,levelId) {
+        avatarViewModel.loadActiveAvatar()
         viewModel.loadLevel(levelId)
     }
-    
+
     // Start/Stop pitch detection based on mode
     LaunchedEffect(selectedMode, showIntro) {
         if (selectedMode == PianoMode.REAL_PIANO && !showIntro) {
@@ -76,7 +85,7 @@ fun LevelScreen(
             }
         }
     }
-    
+
     // Cleanup when leaving screen
     DisposableEffect(Unit) {
         onDispose {
@@ -252,12 +261,10 @@ fun LevelScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
 
-                    // AVATAR (Hero)
                     Box(
                         modifier = Modifier
                             .offset(x = avatarOffsetX)
                             .size(width = 170.dp, height = 240.dp)
-                            .shadow(12.dp, RoundedCornerShape(24.dp))
                             .border(
                                 width = 3.dp,
                                 brush = Brush.verticalGradient(
@@ -268,39 +275,100 @@ fun LevelScreen(
                                 ),
                                 shape = RoundedCornerShape(24.dp)
                             )
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xFF1A1A2E).copy(alpha = 0.9f),
-                                        Color(0xFF16213E).copy(alpha = 0.9f)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(24.dp)
-                            ),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(24.dp))
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                        // Background for hero card
+                        val avatarUrl = activeAvatar?.avatarImageUrl
+                            ?: userPrefs.getAvatarThumbnail()
+
+                        if (!avatarUrl.isNullOrBlank()) {
+                            Log.d("LevelScreenAvatar", "Using avatar image in HERO card: '$avatarUrl'")
+
+                            // Avatar image filling the card
+                            AsyncImage(
+                                model = avatarUrl,
+                                contentDescription = "Hero Avatar",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Log.d(
+                                "LevelScreenAvatar",
+                                "No avatar URL found. Falling back to emoji."
+                            )
+
+                            // Fallback emoji background
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color(0xFF667EEA).copy(alpha = 0.3f),
+                                                Color(0xFF00D9FF).copy(alpha = 0.3f)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("🦸", fontSize = 80.sp)
+                            }
+                        }
+
+                        // Hero label overlay (matching Boss style)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.Black.copy(alpha = 0.7f)
+                                        )
+                                    )
+                                )
+                                .align(Alignment.BottomCenter)
+                                .padding(8.dp)
                         ) {
                             Text(
                                 "HERO",
                                 color = Color(0xFF00D9FF),
                                 fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.align(Alignment.Center)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            // Add hero image here when available
+                        }
+
+                        // Optional: Status indicator in top corner
+                        if (!avatarUrl.isNullOrBlank()) {
                             Box(
                                 modifier = Modifier
-                                    .size(100.dp)
-                                    .background(Color.White.copy(0.1f), CircleShape),
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .size(24.dp)
+                                    .background(
+                                        Color(0xFF4CAF50).copy(alpha = 0.9f),
+                                        CircleShape
+                                    )
+                                    .border(
+                                        width = 2.dp,
+                                        color = Color.White,
+                                        shape = CircleShape
+                                    ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("🦸", fontSize = 48.sp)
+                                Text(
+                                    text = "✓",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
+
+
+
 
                     // BOSS (Villain)
                     Box(
@@ -463,13 +531,13 @@ fun LevelScreen(
                         "La" to "🧥 CAPE",
                         "Si" to "💡 SIGNAL"
                     )
-                    
+
                     val displayNote = if (level.theme == "Batman") {
                         batmanSolfege[nextNoteText] ?: nextNoteText
                     } else {
                         nextNoteText
                     }
-                    
+
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -535,7 +603,7 @@ fun LevelScreen(
                         "GUITAR" to "🎸",
                         "VIOLIN" to "🎻"
                     )
-                
+
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -585,17 +653,17 @@ fun LevelScreen(
                     val pianoViewModel: PianoViewModel = viewModel()
                     var pressedKeys by remember { mutableStateOf(setOf<String>()) }
                     var lastPlayedNote by remember { mutableStateOf("") }
-                
+
                 PianoKeyboard(
                     config = pianoViewModel.pianoState.collectAsState().value.config,
                     onKeyPressed = { key ->
                         pressedKeys = pressedKeys + key.note
                         pianoViewModel.onKeyPressed(key)
-                        
+
                         // Only process if we're not at the end of notes
                         if (state.currentNoteIndex < level.expectedNotes.size) {
                             val expectedNote = level.expectedNotes[state.currentNoteIndex]
-                            
+
                             // Normalize function to handle accents and case
                             val normalizeString = { s: String ->
                                 s.lowercase()
@@ -607,14 +675,14 @@ fun LevelScreen(
                                     .replace("ô", "o")
                                     .trim()
                             }
-                            
+
                             val normalizedExpected = normalizeString(expectedNote)
                             val normalizedSolfege = normalizeString(key.solfege)
-                            
+
                             // Prevent multiple rapid triggers for the same note
                             if (normalizedSolfege != lastPlayedNote) {
                                 lastPlayedNote = normalizedSolfege
-                                
+
                                 // Send normalized note to viewModel for comparison
                                 viewModel.onNotePlayed(normalizedSolfege)
                             }
@@ -641,7 +709,7 @@ fun LevelScreen(
                     // --------------------------
                     val detectedNote by PitchDetector.detectedNote.collectAsState()
                     val detectedFrequency by PitchDetector.detectedFrequency.collectAsState()
-                    
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -677,24 +745,24 @@ fun LevelScreen(
                                     repeatMode = RepeatMode.Reverse
                                 )
                             )
-                            
+
                             Text(
                                 text = "🎤",
                                 fontSize = 64.sp,
                                 modifier = Modifier.scale(pulseScale)
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             Text(
                                 text = "Play on your piano!",
                                 color = Color.White,
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold
                             )
-                            
+
                             Spacer(modifier = Modifier.height(12.dp))
-                            
+
                             // Real-time detection feedback
                             if (detectedNote != null) {
                                 Card(
@@ -779,11 +847,11 @@ fun LevelScreen(
             }
         )
     }
-    
+
     // -------------------------------------------------------------
     // DIALOGS - Rendered on top of everything
     // -------------------------------------------------------------
-    
+
     // Intro Dialog - Shows story, then piano mode choice buttons
     if (showIntro) {
         LevelIntroDialog(
