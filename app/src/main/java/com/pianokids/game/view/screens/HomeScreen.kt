@@ -76,7 +76,9 @@ fun HomeScreen(
     onNavigateToProfile: () -> Unit = {},
     onNavigateToAuth: () -> Unit = {},
     onNavigateBack: () -> Unit = {},
-    onNavigateToLevel: (String, String) -> Unit
+    onNavigateToLevel: (String, String) -> Unit,
+    onNavigateToMusic: () -> Unit = {},
+    onNavigateToKaraoke: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -241,7 +243,8 @@ fun HomeScreen(
                 onProfileClick = onNavigateToProfile,
                 onAddAvatarClick = if (isLoggedIn) {
                     { showCreateAvatarDialog = true }
-                } else null
+                } else null,
+                onMusicClick = onNavigateToMusic
             )
 
             // ---- MAP ----
@@ -685,7 +688,8 @@ fun CompactGameHeader(
     isLoggedIn: Boolean,
     onBackClick: () -> Unit,
     onProfileClick: () -> Unit,
-    onAddAvatarClick: (() -> Unit)? = null
+    onAddAvatarClick: (() -> Unit)? = null,
+    onMusicClick: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier
@@ -779,6 +783,25 @@ fun CompactGameHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Music Recognition Button
+                if (onMusicClick != null) {
+                    IconButton(
+                        onClick = {
+                            SoundManager.playClick()
+                            onMusicClick()
+                        },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(RainbowIndigo.copy(alpha = 0.2f))
+                    ) {
+                        Text(
+                            text = "🎵",
+                            fontSize = 20.sp
+                        )
+                    }
+                }
+
                 // Add Avatar Button (only for logged in users)
                 if (isLoggedIn && onAddAvatarClick != null) {
                     IconButton(

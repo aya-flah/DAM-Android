@@ -6,7 +6,7 @@
         <domain includeSubdomains="true">192.168.1.11</domain>
         <domain includeSubdomains="true">192.168.163.159</domain>
         <domain includeSubdomains="true">172.18.20.43</domain>
-        <domain includeSubdomains="true"> 192.168.1.103</domain>
+        <domain includeSubdomains="true">192.168.1.103</domain>
     </domain-config>
     
     <!-- Allow HTTPS for external services -->
