@@ -50,6 +50,7 @@ import com.pianokids.game.utils.UserPreferences
 import com.pianokids.game.viewmodel.AuthViewModel
 import com.pianokids.game.viewmodel.AvatarViewModel
 import com.pianokids.game.utils.components.AvatarCreationDialog
+import com.pianokids.game.utils.components.AIAvatarPreviewDialog
 import kotlinx.coroutines.launch
 import kotlin.math.sin
 
@@ -110,6 +111,15 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val avatarError by avatarViewModel.error.collectAsState()
     val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
+    
+    // AI Avatar Generation states
+    val isGeneratingAI by avatarViewModel.isGeneratingAI.collectAsState()
+    val aiGenerationResponse by avatarViewModel.aiGenerationResponse.collectAsState()
+    var showAIPreviewDialog by remember { mutableStateOf(false) }
+    var pendingAIAvatar by remember { mutableStateOf<com.pianokids.game.data.models.AvatarGenerationResponse?>(null) }
+    var pendingAIAvatarName by remember { mutableStateOf("") }
+    var pendingPrompt by remember { mutableStateOf("") }
+    var pendingStyle by remember { mutableStateOf("cartoon") }
 
     // Show avatar error
     LaunchedEffect(avatarError) {
@@ -121,6 +131,21 @@ fun HomeScreen(
                 )
             }
             avatarViewModel.clearError()
+        }
+    }
+    
+    // Listen for AI generation success and show preview
+    LaunchedEffect(aiGenerationResponse) {
+        aiGenerationResponse?.let { response ->
+            android.util.Log.d("HomeScreen", "🎉 AI Generation Response Received!")
+            android.util.Log.d("HomeScreen", "Avatar Name: ${response.name}")
+            android.util.Log.d("HomeScreen", "Description: ${response.aiGeneratedDescription}")
+            android.util.Log.d("HomeScreen", "Image URL: ${response.avatarImageUrl}")
+            
+            pendingAIAvatar = response
+            showAIPreviewDialog = true
+            android.util.Log.d("HomeScreen", "✅ Preview dialog should show now: $showAIPreviewDialog")
+            avatarViewModel.clearAIGenerationResponse()
         }
     }
     val userName by authViewModel.userName.collectAsState()
@@ -372,7 +397,115 @@ fun HomeScreen(
                             duration = SnackbarDuration.Short
                         )
                     }
+                },
+                onCreateAvatarWithAI = { name, prompt, style ->
+                    showCreateAvatarDialog = false
+                    pendingAIAvatarName = name
+                    pendingPrompt = prompt
+                    pendingStyle = style
+                    
+                    // Generate avatar - will trigger preview or error
+                    avatarViewModel.generateAvatarFromPrompt(prompt, name, style)
                 }
+            )
+        }
+        
+        // AI Avatar Preview Dialog
+        if (showAIPreviewDialog && pendingAIAvatar != null) {
+            AIAvatarPreviewDialog(
+                avatarName = pendingAIAvatarName,
+                generationResponse = pendingAIAvatar!!,
+                onSave = {
+                    // Save avatar to database (was only preview before)
+                    pendingAIAvatar?.previewData?.let { previewData ->
+                        avatarViewModel.saveAIAvatar(previewData)
+                        
+                        showAIPreviewDialog = false
+                        pendingAIAvatar = null
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "✨ Avatar saved! Welcome, ${pendingAIAvatarName}!",
+                                duration = SnackbarDuration.Short
+                            )
+                        }
+                    }
+                },
+                onRegenerate = {
+                    // Regenerate with same prompt (don't save current preview)
+                    showAIPreviewDialog = false
+                    pendingAIAvatar = null
+                    
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "🔄 Creating a new version...",
+                            duration = SnackbarDuration.Indefinite
+                        )
+                    }
+                    
+                    avatarViewModel.generateAvatarFromPrompt(pendingPrompt, pendingAIAvatarName, pendingStyle)
+                },
+                onDismiss = {
+                    // Cancel - don't save avatar to database
+                    showAIPreviewDialog = false
+                    pendingAIAvatar = null
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "❌ Avatar not saved",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                },
+                isSaving = false
+            )
+        }
+        
+        // AI Generation Loading Dialog
+        if (isGeneratingAI) {
+            AlertDialog(
+                onDismissRequest = { /* Can't dismiss while generating */ },
+                title = { 
+                    Text("🎨 Creating Your AI Avatar", style = MaterialTheme.typography.headlineSmall) 
+                },
+                text = {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .size(64.dp),
+                            color = Color(0xFF667EEA),
+                            strokeWidth = 6.dp
+                        )
+                        Text(
+                            "Please wait...",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "⏱️ Usually takes 10-30 seconds",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFF667EEA),
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Creating unique AI art for your avatar...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                },
+                confirmButton = {}
             )
         }
 
@@ -785,40 +918,62 @@ fun CompactGameHeader(
             ) {
                 // Music Recognition Button
                 if (onMusicClick != null) {
-                    IconButton(
+                    Button(
                         onClick = {
                             SoundManager.playClick()
                             onMusicClick()
                         },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(RainbowIndigo.copy(alpha = 0.2f))
+                        modifier = Modifier.height(36.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = RainbowIndigo.copy(alpha = 0.2f),
+                            contentColor = RainbowIndigo
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(18.dp)
                     ) {
                         Text(
                             text = "🎵",
-                            fontSize = 20.sp
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Recognize",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         )
                     }
                 }
 
                 // Add Avatar Button (only for logged in users)
                 if (isLoggedIn && onAddAvatarClick != null) {
-                    IconButton(
+                    Button(
                         onClick = {
                             SoundManager.playClick()
                             onAddAvatarClick()
                         },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(RainbowBlue.copy(alpha = 0.2f))
+                        modifier = Modifier.height(36.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = RainbowBlue.copy(alpha = 0.2f),
+                            contentColor = RainbowBlue
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(18.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Add Avatar",
                             tint = RainbowBlue,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Avatar",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         )
                     }
                 }

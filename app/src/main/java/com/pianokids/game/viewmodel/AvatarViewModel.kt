@@ -25,8 +25,14 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
     
+    private val _isGeneratingAI = MutableStateFlow(false)
+    val isGeneratingAI: StateFlow<Boolean> = _isGeneratingAI.asStateFlow()
+    
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    
+    private val _aiGenerationResponse = MutableStateFlow<AvatarGenerationResponse?>(null)
+    val aiGenerationResponse: StateFlow<AvatarGenerationResponse?> = _aiGenerationResponse.asStateFlow()
 
     fun loadUserAvatars() {
         viewModelScope.launch {
@@ -221,6 +227,71 @@ class AvatarViewModel(application: Application) : AndroidViewModel(application) 
                 }
             )
         }
+    }
+    
+    // Gemini AI Avatar Generation (preview only)
+    fun generateAvatarFromPrompt(prompt: String, name: String, style: String = "cartoon") {
+        viewModelScope.launch {
+            _isGeneratingAI.value = true
+            _isLoading.value = true
+            _error.value = null
+            _aiGenerationResponse.value = null
+            
+            Log.d("AvatarViewModel", "🤖 Generating avatar preview with AI - Name: $name, Prompt: $prompt, Style: $style")
+            
+            repository.generateAvatarFromPrompt(prompt, name, style).fold(
+                onSuccess = { response ->
+                    Log.d("AvatarViewModel", "✅ AI Avatar preview generated successfully")
+                    Log.d("AvatarViewModel", "✅ Name: ${response.name}")
+                    Log.d("AvatarViewModel", "✅ Description: ${response.description}")
+                    Log.d("AvatarViewModel", "✅ Generation Source: ${response.generationSource}")
+                    
+                    // Emit generation response for preview (NOT saved to DB yet)
+                    _aiGenerationResponse.value = response
+                },
+                onFailure = { exception ->
+                    _error.value = exception.message
+                    Log.e("AvatarViewModel", "❌ Failed to generate avatar with AI: ${exception.message}", exception)
+                }
+            )
+            
+            _isGeneratingAI.value = false
+            _isLoading.value = false
+        }
+    }
+    
+    // Save AI avatar after user approves preview
+    fun saveAIAvatar(previewData: Any) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            
+            Log.d("AvatarViewModel", "💾 Saving AI avatar...")
+            
+            repository.saveAIAvatar(previewData).fold(
+                onSuccess = { response ->
+                    Log.d("AvatarViewModel", "✅ AI Avatar saved successfully!")
+                    Log.d("AvatarViewModel", "✅ Avatar ID: ${response.avatarId}")
+                    
+                    // Save thumbnail if available
+                    response.avatarImageUrl
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { userPrefs.saveAvatarThumbnail(it) }
+                    
+                    // Reload avatars to include the new saved avatar
+                    loadUserAvatars()
+                },
+                onFailure = { exception ->
+                    _error.value = exception.message
+                    Log.e("AvatarViewModel", "❌ Failed to save AI avatar: ${exception.message}", exception)
+                }
+            )
+            
+            _isLoading.value = false
+        }
+    }
+    
+    fun clearAIGenerationResponse() {
+        _aiGenerationResponse.value = null
     }
     
     fun clearError() {

@@ -304,4 +304,77 @@ class AvatarRepository(private val context: Context) {
             Result.failure(e)
         }
     }
+    
+    // Gemini AI Avatar Generation
+    suspend fun generateAvatarFromPrompt(
+        prompt: String,
+        name: String,
+        style: String = "cartoon"
+    ): Result<AvatarGenerationResponse> {
+        return try {
+            Log.d("AvatarRepository", "🤖 generateAvatarFromPrompt called")
+            Log.d("AvatarRepository", "🤖 Prompt: $prompt, Name: $name, Style: $style")
+            
+            val (authToken, providerId) = getAuthHeaders() ?: return Result.failure(
+                Exception("Not authenticated")
+            )
+            
+            val generateDto = GenerateAvatarFromPromptDto(
+                prompt = prompt,
+                name = name,
+                style = style
+            )
+            
+            Log.d("AvatarRepository", "🤖 Making API call to generate avatar with AI...")
+            
+            val response = api.generateAvatarFromPrompt(generateDto, authToken, providerId)
+            
+            Log.d("AvatarRepository", "🤖 API response code: ${response.code()}")
+            
+            if (response.isSuccessful && response.body() != null) {
+                val result = response.body()!!
+                Log.d("AvatarRepository", "✅ AI Avatar preview generated successfully: ${result.name}")
+                Log.d("AvatarRepository", "✅ Description: ${result.description}")
+                Log.d("AvatarRepository", "✅ Image URL: ${result.avatarImageUrl}")
+                Result.success(result)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e("AvatarRepository", "❌ Generate avatar failed with code ${response.code()}")
+                Log.e("AvatarRepository", "❌ Error body: $errorBody")
+                Result.failure(Exception("Failed to generate avatar: ${response.code()} - $errorBody"))
+            }
+        } catch (e: Exception) {
+            Log.e("AvatarRepository", "❌ Generate avatar exception: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
+    
+    // Save AI-generated avatar after user approves
+    suspend fun saveAIAvatar(previewData: Any): Result<SaveAIAvatarResponse> {
+        return try {
+            Log.d("AvatarRepository", "💾 Saving AI avatar to database...")
+            
+            val (authToken, providerId) = getAuthHeaders() ?: return Result.failure(
+                Exception("Not authenticated")
+            )
+            
+            val body = com.pianokids.game.api.SaveAIAvatarRequest(previewData)
+            val response = api.saveAIAvatar(body, authToken, providerId)
+            
+            if (response.isSuccessful && response.body() != null) {
+                val result = response.body()!!
+                Log.d("AvatarRepository", "✅ AI Avatar saved successfully!")
+                Log.d("AvatarRepository", "✅ Avatar ID: ${result.avatarId}")
+                Log.d("AvatarRepository", "✅ Name: ${result.name}")
+                Result.success(result)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e("AvatarRepository", "❌ Save avatar failed: $errorBody")
+                Result.failure(Exception("Failed to save avatar: $errorBody"))
+            }
+        } catch (e: Exception) {
+            Log.e("AvatarRepository", "❌ Save avatar exception: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }

@@ -101,9 +101,30 @@ interface AvatarApiService {
         @Header("X-Auth-Token") authToken: String,
         @Header("X-Provider-ID") providerId: String
     ): Response<Avatar>
+    
+    // Gemini AI Avatar Generation (preview only, not saved)
+    @POST("/api/avatars/generate-from-prompt")
+    suspend fun generateAvatarFromPrompt(
+        @Body generateDto: GenerateAvatarFromPromptDto,
+        @Header("X-Auth-Token") authToken: String,
+        @Header("X-Provider-ID") providerId: String
+    ): Response<AvatarGenerationResponse>
+    
+    // Save AI-generated avatar after user approves
+    @POST("/api/avatars/save-ai-avatar")
+    suspend fun saveAIAvatar(
+        @Body body: SaveAIAvatarRequest,
+        @Header("X-Auth-Token") authToken: String,
+        @Header("X-Provider-ID") providerId: String
+    ): Response<SaveAIAvatarResponse>
 }
 
 data class DeleteAvatarResponse(
     @SerializedName("message")
     val message: String
+)
+
+data class SaveAIAvatarRequest(
+    @SerializedName("previewData")
+    val previewData: Any
 )

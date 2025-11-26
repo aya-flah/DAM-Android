@@ -32,7 +32,8 @@ import com.pianokids.game.utils.UserPreferences
 @Composable
 fun AvatarCreationDialog(
     onDismiss: () -> Unit,
-    onCreateAvatar: (name: String, avatarImageUrl: String?) -> Unit
+    onCreateAvatar: (name: String, avatarImageUrl: String?) -> Unit,
+    onCreateAvatarWithAI: (name: String, prompt: String, style: String) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
     val userPrefs = remember { UserPreferences(context) }
@@ -92,6 +93,9 @@ fun AvatarCreationDialog(
                             onCreateWithReadyPlayerMe = {
                                 currentStep = AvatarCreationStep.READY_PLAYER_ME
                             },
+                            onCreateWithAI = {
+                                currentStep = AvatarCreationStep.AI_PROMPT
+                            },
                             onCreateWithoutAvatar = {
                                 onCreateAvatar(avatarName, null)
                                 onDismiss()
@@ -99,6 +103,20 @@ fun AvatarCreationDialog(
                             onBack = {
                                 currentStep = AvatarCreationStep.NAME
                             }
+                        )
+                    }
+
+                    AvatarCreationStep.AI_PROMPT -> {
+                        AIAvatarPromptDialog(
+                            avatarName = avatarName,
+                            onGenerateAvatar = { prompt, style ->
+                                onCreateAvatarWithAI(avatarName, prompt, style)
+                                onDismiss()
+                            },
+                            onBack = {
+                                currentStep = AvatarCreationStep.AVATAR_CHOICE
+                            },
+                            onDismiss = onDismiss
                         )
                     }
 
@@ -130,6 +148,7 @@ enum class AvatarCreationStep {
     NAME,
     AVATAR_CHOICE,
     READY_PLAYER_ME,
+    AI_PROMPT,
     WAITING_FOR_AVATAR
 }
 
@@ -221,6 +240,7 @@ private fun NameInputStep(
 private fun AvatarChoiceStep(
     avatarName: String,
     onCreateWithReadyPlayerMe: () -> Unit,
+    onCreateWithAI: () -> Unit,
     onCreateWithoutAvatar: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -244,13 +264,53 @@ private fun AvatarChoiceStep(
             textAlign = TextAlign.Center
         )
 
+        // AI Avatar Generation Option
+        Button(
+            onClick = onCreateWithAI,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(70.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.White
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "✨",
+                        fontSize = 24.sp
+                    )
+                    Text(
+                        text = "Create with AI",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF667EEA)
+                    )
+                }
+                Text(
+                    text = "Describe your dream character (e.g., Naruto, Mickey Mouse)",
+                    fontSize = 12.sp,
+                    color = Color(0xFF667EEA).copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        // Ready Player Me Option
         Button(
             onClick = onCreateWithReadyPlayerMe,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(60.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White
+                containerColor = Color.White.copy(alpha = 0.9f)
             ),
             shape = RoundedCornerShape(16.dp)
         ) {
@@ -258,13 +318,13 @@ private fun AvatarChoiceStep(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "🎭 Create with Ready Player Me",
+                    text = "🎭 Create 3D Avatar",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF667EEA)
                 )
                 Text(
-                    text = "Create a 3D avatar in-app",
+                    text = "Design your own 3D character",
                     fontSize = 12.sp,
                     color = Color(0xFF667EEA).copy(alpha = 0.7f)
                 )

@@ -52,7 +52,19 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     /** Update user name (called from ProfileScreen when name is edited) */
     fun updateUserName(newName: String) {
         Log.d("AuthViewModel", "updateUserName called: $newName")
-        _userName.value = newName
+        viewModelScope.launch {
+            authRepo.updateUserName(newName).fold(
+                onSuccess = { updatedName ->
+                    _userName.value = updatedName
+                    Log.d("AuthViewModel", "Name updated successfully: $updatedName")
+                },
+                onFailure = { exception ->
+                    Log.e("AuthViewModel", "Failed to update name", exception)
+                    // Still update locally even if backend fails
+                    _userName.value = newName
+                }
+            )
+        }
     }
 
     /** Refresh the flow – checks local token + backend verification */

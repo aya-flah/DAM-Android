@@ -10,11 +10,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -22,9 +24,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.ImageLoader
 import com.pianokids.game.data.models.Avatar
 import com.pianokids.game.ui.theme.*
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun AvatarImageView(
@@ -34,6 +41,11 @@ fun AvatarImageView(
     borderWidth: Int = 0,
     modifier: Modifier = Modifier
 ) {
+    // Debug logging
+    LaunchedEffect(avatarUrl) {
+        android.util.Log.d("AvatarImageView", "🖼️ Loading avatar image: $avatarUrl")
+    }
+    
     Box(
         modifier = modifier
             .size(size.dp)
@@ -48,15 +60,45 @@ fun AvatarImageView(
         contentAlignment = Alignment.Center
     ) {
         if (avatarUrl != null && avatarUrl.isNotEmpty()) {
+            val context = LocalContext.current
+            
+            // Custom image loader with longer timeout for AI images
+            val imageLoader = remember {
+                ImageLoader.Builder(context)
+                    .okHttpClient {
+                        OkHttpClient.Builder()
+                            .connectTimeout(30, TimeUnit.SECONDS)
+                            .readTimeout(120, TimeUnit.SECONDS) // 2 minutes for AI images
+                            .writeTimeout(30, TimeUnit.SECONDS)
+                            .build()
+                    }
+                    .build()
+            }
+            
+            val imageRequest = remember(avatarUrl) {
+                ImageRequest.Builder(context)
+                    .data(avatarUrl)
+                    .crossfade(true)
+                    .build()
+            }
+            
             AsyncImage(
-                model = avatarUrl,
+                model = imageRequest,
+                imageLoader = imageLoader,
                 contentDescription = "Avatar",
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                onSuccess = { 
+                    android.util.Log.d("AvatarImageView", "✅ Image loaded successfully: $avatarUrl")
+                },
+                onError = { error ->
+                    android.util.Log.e("AvatarImageView", "❌ Failed to load image: $avatarUrl", error.result.throwable)
+                }
             )
         } else {
+            android.util.Log.w("AvatarImageView", "⚠️ No avatar URL provided, showing fallback")
             // Fallback when no avatar URL
             Box(
                 modifier = Modifier
@@ -87,7 +129,8 @@ fun AvatarsSection(
     isLoading: Boolean,
     onCreateAvatar: () -> Unit,
     onSelectAvatar: (Avatar) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDeleteAvatar: ((Avatar) -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -182,7 +225,8 @@ fun AvatarsSection(
                     AvatarCard(
                         avatar = avatar,
                         isActive = activeAvatar?.id == avatar.id,
-                        onClick = { onSelectAvatar(avatar) }
+                        onClick = { onSelectAvatar(avatar) },
+                        onDelete = onDeleteAvatar
                     )
                 }
             }
@@ -195,80 +239,102 @@ fun AvatarCard(
     avatar: Avatar,
     isActive: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDelete: ((Avatar) -> Unit)? = null
 ) {
-    Column(
-        modifier = modifier
-            .width(120.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-            .background(
-                if (isActive) {
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            RainbowBlue.copy(alpha = 0.3f),
-                            RainbowIndigo.copy(alpha = 0.3f)
+    Box(modifier = modifier.width(120.dp)) {
+        Column(
+            modifier = Modifier
+                .width(120.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .clickable(onClick = onClick)
+                .background(
+                    if (isActive) {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                RainbowBlue.copy(alpha = 0.3f),
+                                RainbowIndigo.copy(alpha = 0.3f)
+                            )
                         )
-                    )
-                } else {
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.1f),
-                            Color.White.copy(alpha = 0.05f)
+                    } else {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.1f),
+                                Color.White.copy(alpha = 0.05f)
+                            )
                         )
-                    )
-                }
+                    }
+                )
+                .then(
+                    if (isActive) {
+                        Modifier.border(3.dp, RainbowBlue, RoundedCornerShape(16.dp))
+                    } else {
+                        Modifier
+                    }
+                )
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Avatar Image
+            AvatarImageView(
+                avatarUrl = avatar.avatarImageUrl,
+                size = 80,
+                borderColor = if (isActive) RainbowBlue else Color.Transparent,
+                borderWidth = if (isActive) 2 else 0
             )
-            .then(
-                if (isActive) {
-                    Modifier.border(3.dp, RainbowBlue, RoundedCornerShape(16.dp))
-                } else {
-                    Modifier
-                }
-            )
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Avatar Image
-        AvatarImageView(
-            avatarUrl = avatar.avatarImageUrl,
-            size = 80,
-            borderColor = if (isActive) RainbowBlue else Color.Transparent,
-            borderWidth = if (isActive) 2 else 0
-        )
-        
-        // Avatar Name
-        Text(
-            text = avatar.name,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        
-        // Status Badge
-        if (isActive) {
+
+            // Avatar Name
             Text(
-                text = "Active",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = RainbowBlue,
+                text = avatar.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Status Badge
+            if (isActive) {
+                Text(
+                    text = "Active",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = RainbowBlue,
+                    modifier = Modifier
+                        .background(
+                            RainbowBlue.copy(alpha = 0.2f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            } else {
+                Text(
+                    text = "Level ${avatar.level}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.6f)
+                )
+            }
+        }
+
+        // Delete Button (Top-Right Corner)
+        if (onDelete != null) {
+            IconButton(
+                onClick = { onDelete(avatar) },
                 modifier = Modifier
-                    .background(
-                        RainbowBlue.copy(alpha = 0.2f),
-                        RoundedCornerShape(8.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            )
-        } else {
-            Text(
-                text = "Level ${avatar.level}",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.6f)
-            )
+                    .align(Alignment.TopEnd)
+                    .size(32.dp)
+                    .background(Color(0xFFFF6B6B), CircleShape)
+                    .shadow(4.dp, CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Delete Avatar",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.PATCH
 
 interface AuthApiService {
     @POST("/auth/social-login")
@@ -20,6 +21,13 @@ interface AuthApiService {
         @Header("X-Auth-Token") authToken: String,
         @Header("X-Provider-ID") providerId: String
     ): Response<VerifyResponse>
+
+    @PATCH("/auth/update-name")
+    suspend fun updateName(
+        @Header("X-Auth-Token") authToken: String,
+        @Header("X-Provider-ID") providerId: String,
+        @Body request: UpdateNameRequest
+    ): Response<UpdateNameResponse>
 }
 
 data class VerifyResponse(
@@ -35,5 +43,14 @@ data class VerifyUser(
 
 data class DevLoginRequest(
     val email: String,
+    val name: String
+)
+
+data class UpdateNameRequest(
+    val name: String
+)
+
+data class UpdateNameResponse(
+    val success: Boolean,
     val name: String
 )

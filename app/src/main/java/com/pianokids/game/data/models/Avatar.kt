@@ -170,3 +170,87 @@ data class AvatarStats(
     @SerializedName("outfitsUnlocked")
     val outfitsUnlocked: Int
 )
+
+// DTOs for Gemini AI Avatar Generation
+data class GenerateAvatarFromPromptDto(
+    @SerializedName("prompt")
+    val prompt: String,
+    
+    @SerializedName("name")
+    val name: String,
+    
+    @SerializedName("style")
+    val style: String = "cartoon"
+)
+
+data class AvatarGenerationResponse(
+    @SerializedName("name")
+    val name: String,
+    
+    @SerializedName("description")
+    val description: String,
+    
+    @SerializedName("aiGeneratedDescription")
+    val aiGeneratedDescription: String?,
+    
+    @SerializedName("suggestedAttributes")
+    val suggestedAttributes: SuggestedAttributes,
+    
+    @SerializedName("avatarImageUrl")
+    val avatarImageUrl: String?,
+    
+    @SerializedName("generationSource")
+    val generationSource: String,
+    
+    @SerializedName("previewData")
+    val previewData: Any // Opaque preview data to send back when saving
+)
+
+data class SaveAIAvatarResponse(
+    @SerializedName("avatarId")
+    val avatarId: String,
+    
+    @SerializedName("name")
+    val name: String,
+    
+    @SerializedName("avatarImageUrl")
+    val avatarImageUrl: String?,
+    
+    @SerializedName("aiGeneratedDescription")
+    val aiGeneratedDescription: String?,
+    
+    @SerializedName("generationSource")
+    val generationSource: String,
+    
+    @SerializedName("avatar")
+    val avatar: Avatar
+)
+
+data class SuggestedAttributes(
+    @SerializedName("bodyType")
+    val bodyType: String,
+    
+    @SerializedName("skinTone")
+    val skinTone: String,
+    
+    @SerializedName("hairstyle")
+    val hairstyle: String,
+    
+    @SerializedName("hairColor")
+    val hairColor: String,
+    
+    @SerializedName("eyeStyle")
+    val eyeStyle: String,
+    
+    @SerializedName("eyeColor")
+    val eyeColor: String,
+    
+    @SerializedName("clothingType")
+    val clothingType: String,
+    
+    @SerializedName("clothingColor")
+    val clothingColor: String,
+    
+    @SerializedName("accessories")
+    val accessories: List<String>
+)

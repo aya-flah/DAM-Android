@@ -6,6 +6,7 @@ import android.util.Log
 import com.pianokids.game.data.api.AuthApiService
 import com.pianokids.game.data.api.RetrofitClient
 import com.pianokids.game.data.models.AuthResponse
+import com.pianokids.game.data.models.AuthUser
 import com.pianokids.game.data.models.SocialLoginRequest
 import com.pianokids.game.utils.UserPreferences
 import kotlinx.coroutines.Dispatchers
@@ -129,5 +130,51 @@ class AuthRepository(context: Context) {
 
     fun logout() {
         prefs.clearAuth()
+    }
+
+    suspend fun updateUserName(newName: String): Result<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = prefs.getAuthToken() ?: return@withContext Result.failure(Exception("Not authenticated"))
+                val providerId = prefs.getProviderId() ?: return@withContext Result.failure(Exception("No provider ID"))
+
+                Log.d("AuthRepository", "Updating user name to: $newName")
+
+                val request = com.pianokids.game.data.api.UpdateNameRequest(newName)
+                val response = api.updateName(token, providerId, request)
+
+                if (response.isSuccessful) {
+                    val updateResponse = response.body()
+                    if (updateResponse != null && updateResponse.success) {
+                        // Update local user data
+                        val user = prefs.getUser()
+                        if (user != null) {
+                            val updatedAuthUser = AuthUser(
+                                id = user.id,
+                                email = user.email,
+                                name = updateResponse.name,
+                                photoUrl = user.photoUrl,
+                                provider = user.provider,
+                                providerId = user.providerId,
+                                score = user.score,
+                                level = user.level
+                            )
+                            prefs.saveUser(updatedAuthUser)
+                        }
+                        Log.d("AuthRepository", "User name updated successfully: ${updateResponse.name}")
+                        Result.success(updateResponse.name)
+                    } else {
+                        Result.failure(Exception("Update failed"))
+                    }
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                    Log.e("AuthRepository", "Update name failed: $errorBody")
+                    Result.failure(Exception("Failed to update name: $errorBody"))
+                }
+            } catch (e: Exception) {
+                Log.e("AuthRepository", "Update name error", e)
+                Result.failure(e)
+            }
+        }
     }
 }

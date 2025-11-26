@@ -102,7 +102,8 @@ dependencies {
 
     implementation("com.facebook.android:facebook-login:16.2.0")
 
-
+    // OkHttp for network requests (if not already added)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:20.7.0")
 
@@ -118,7 +119,8 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     implementation("io.coil-kt:coil-compose:2.5.0")
-    
+    // Gemini AI SDK
+    implementation("com.google.ai.client.generativeai:generativeai:0.1.2")
     // Chromium WebView (Modern, works better than system WebView)
     implementation("com.google.android.gms:play-services-cronet:18.0.1")
 }
