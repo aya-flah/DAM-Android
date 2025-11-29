@@ -1,5 +1,6 @@
 package com.pianokids.game.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pianokids.game.data.models.Level
@@ -31,6 +32,9 @@ class LevelViewModel : ViewModel() {
     val uiState: StateFlow<LevelUiState> = _uiState
 
     private var expectedNotes: List<String> = emptyList()
+    private var lastPlayedNormalized: String? = null
+    private var wrongStreak: Int = 0
+    private var lastCorrectTimeMs: Long = 0
 
     /**
      * Load unlocked levels for a user
@@ -93,12 +97,31 @@ class LevelViewModel : ViewModel() {
         if (expectedNotes.isEmpty()) return
         if (index >= expectedNotes.size) return
 
-        val expected = expectedNotes[index].lowercase()
+        // Normalize function to remove accents and standardize
+        fun normalize(s: String): String {
+            return s.lowercase()
+                .replace("é", "e")
+                .replace("è", "e")
+                .replace("ê", "e")
+                .replace("à", "a")
+                .replace("ù", "u")
+                .replace("ô", "o")
+                .trim()
+        }
+
+        val expected = normalize(expectedNotes[index])
+        val played = normalize(note)
+        
+        // Debug logging
+        Log.d("LevelViewModel", "Note played: '$played' | Expected: '$expected' | Match: ${played == expected}")
 
         // ---------------------------
         // CORRECT NOTE
         // ---------------------------
-        if (note.lowercase() == expected) {
+        if (played == expected) {
+            // Reset wrong streak on correct
+            wrongStreak = 0
+            lastCorrectTimeMs = System.currentTimeMillis()
             val newIndex = index + 1
             val progress = newIndex.toFloat() / expectedNotes.size.toFloat()
 
@@ -133,6 +156,22 @@ class LevelViewModel : ViewModel() {
         // ---------------------------
         // WRONG NOTE
         // ---------------------------
+        // Filter: ignore brief wrongs immediately after a correct (300ms grace)
+        val now = System.currentTimeMillis()
+        if (now - lastCorrectTimeMs < 300) {
+            Log.d("LevelViewModel", "Grace period: ignoring wrong within 300ms after correct")
+            return
+        }
+
+        // Require two consecutive wrongs before counting
+        wrongStreak = if (played == lastPlayedNormalized) wrongStreak + 1 else 1
+        lastPlayedNormalized = played
+
+        if (wrongStreak < 2) {
+            Log.d("LevelViewModel", "Wrong streak ${wrongStreak}/2: not counting yet")
+            return
+        }
+
         val newWrongCount = state.wrongNoteCount + 1
         val newScore = (state.score - 5).coerceAtLeast(0)
 
