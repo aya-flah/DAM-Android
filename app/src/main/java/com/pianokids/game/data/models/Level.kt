@@ -11,6 +11,9 @@ data class Level(
     val backgroundUrl: String? = null,
     val bossUrl: String? = null,
     val musicUrl: String? = null,
+    val previewAudioUrl: String? = null,  // Song preview URL
+    val previewDuration: Int = 10,        // Duration in seconds
+    val autoPlayPreview: Boolean = false,  // Auto-play on level load
     val starsUnlocked: Int = 0,
     val mapPosition: MapPosition? = null,
     val islandImageUrl: String? = null,

@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -40,8 +41,9 @@ fun PianoKeyboard(
 ) {
     val keys = remember { createPianoKeys(config.noteType) }
     
-    // Only white keys for simplified layout
+    // Use all keys (white and black)
     val whiteKeys = keys.filter { !it.isBlackKey }
+    val blackKeys = keys.filter { it.isBlackKey }
     
     Box(
         modifier = modifier
@@ -83,6 +85,109 @@ fun PianoKeyboard(
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+        
+        // Black keys overlay
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(120.dp)
+                .align(Alignment.TopCenter)
+                .padding(top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // Position black keys over white keys
+            whiteKeys.forEachIndexed { index, whiteKey ->
+                Box(modifier = Modifier.weight(1f)) {
+                    // Check if there's a black key after this white key
+                    val blackKey = blackKeys.find { 
+                        it.note == whiteKey.note + "#" 
+                    }
+                    
+                    if (blackKey != null && (whiteKey.note == "C" || whiteKey.note == "D" || 
+                        whiteKey.note == "F" || whiteKey.note == "G" || whiteKey.note == "A")) {
+                        BlackPianoKey(
+                            key = blackKey,
+                            isPressed = pressedKeys.contains(blackKey.note),
+                            showLabel = config.showLabels,
+                            highlightColor = config.highlightColor,
+                            onKeyPressed = {
+                                onKeyPressed(blackKey)
+                                PianoSoundManager.playNote(blackKey.solfege)
+                            },
+                            onKeyReleased = { onKeyReleased(blackKey) },
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .width(40.dp)
+                                .fillMaxHeight()
+                                .offset(x = 20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Individual black piano key
+ */
+@Composable
+private fun BlackPianoKey(
+    key: PianoKey,
+    isPressed: Boolean,
+    showLabel: Boolean,
+    highlightColor: Color,
+    onKeyPressed: () -> Unit,
+    onKeyReleased: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var localPressed by remember { mutableStateOf(false) }
+    
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed || localPressed) 0.92f else 1f,
+        animationSpec = tween(durationMillis = 100),
+        label = "black_key_scale"
+    )
+    
+    Box(
+        modifier = modifier
+            .shadow(8.dp, RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp))
+            .scale(scale)
+            .clip(RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp))
+            .background(
+                if (isPressed || localPressed) {
+                    Color(0xFF4A4A4A)  // Solid color instead of gradient for better hardware rendering
+                } else {
+                    Color(0xFF1A1A1A)  // Solid color for black keys
+                }
+            )
+            .border(
+                width = 1.dp,
+                color = if (isPressed || localPressed) highlightColor else Color.Black,
+                shape = RoundedCornerShape(bottomStart = 6.dp, bottomEnd = 6.dp)
+            )
+            .pointerInput(key.note) {
+                detectTapGestures(
+                    onPress = {
+                        localPressed = true
+                        onKeyPressed()
+                        tryAwaitRelease()
+                        localPressed = false
+                        onKeyReleased()
+                    }
+                )
+            },
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        if (showLabel) {
+            Text(
+                text = key.displayLabel,
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
         }
     }
 }

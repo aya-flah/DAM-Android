@@ -48,11 +48,12 @@ object PianoSoundManager {
     
     /**
      * Load sound files for all instruments
-     * Using solfège notation: Do, Ré, Mi, Fa, Sol, La, Si
+     * Using solfège notation: Do, Ré, Mi, Fa, Sol, La, Si + sharps
      */
     private fun loadPianoSounds(context: Context) {
         soundPool?.let { pool ->
-            val notes = listOf("Do", "Ré", "Mi", "Fa", "Sol", "La", "Si")
+            // Include both white keys and black keys (sharps)
+            val notes = listOf("Do", "Do#", "Ré", "Ré#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si")
             val instruments = listOf("PIANO", "GUITAR", "VIOLIN")
             
             // Resource name mappings for each instrument
@@ -62,14 +63,19 @@ object PianoSoundManager {
                 "VIOLIN" to "violin"
             )
             
-            // Note name to resource suffix mapping
+            // Note name to resource suffix mapping (including sharps)
             val noteSuffixes = mapOf(
                 "Do" to "do",
+                "Do#" to "c_sharp",
                 "Ré" to "re",
+                "Ré#" to "d_sharp",
                 "Mi" to "mi",
                 "Fa" to "fa",
+                "Fa#" to "f_sharp",
                 "Sol" to "sol",
+                "Sol#" to "g_sharp",
                 "La" to "la",
+                "La#" to "a_sharp",
                 "Si" to "si"
             )
             
@@ -80,7 +86,12 @@ object PianoSoundManager {
                 
                 notes.forEach { note ->
                     val suffix = noteSuffixes[note] ?: note.lowercase()
-                    val resourceName = "${prefix}_${suffix}"
+                    // For sharps, use direct file name (e.g., "c_sharp" instead of "note_c_sharp")
+                    val resourceName = if (note.contains("#")) {
+                        suffix  // Sharp files are named directly: c_sharp.mp3, d_sharp.mp3, etc.
+                    } else {
+                        "${prefix}_${suffix}"  // White keys: note_do.mp3, guitar_re.mp3, etc.
+                    }
                     
                     // Try to get resource ID using reflection
                     val resourceId = try {
@@ -181,6 +192,8 @@ object PianoSoundManager {
 
 /**
  * Sound files in res/raw (using solfège notation):
+ * 
+ * WHITE KEYS:
  * ✅ res/raw/note_do.mp3  (Do/C - 261.63 Hz)
  * ✅ res/raw/note_re.mp3  (Ré/D - 293.66 Hz)
  * ✅ res/raw/note_mi.mp3  (Mi/E - 329.63 Hz)
@@ -188,4 +201,11 @@ object PianoSoundManager {
  * ✅ res/raw/note_sol.mp3 (Sol/G - 392.00 Hz)
  * ✅ res/raw/note_la.mp3  (La/A - 440.00 Hz)
  * ✅ res/raw/note_si.mp3  (Si/B - 493.88 Hz)
+ * 
+ * BLACK KEYS (SHARPS):
+ * ✅ res/raw/c_sharp.mp3  (Do#/C# - 277.18 Hz)
+ * ✅ res/raw/d_sharp.mp3  (Ré#/D# - 311.13 Hz)
+ * ✅ res/raw/f_sharp.mp3  (Fa#/F# - 369.99 Hz)
+ * ✅ res/raw/g_sharp.mp3  (Sol#/G# - 415.30 Hz)
+ * ✅ res/raw/a_sharp.mp3  (La#/A# - 466.16 Hz)
  */

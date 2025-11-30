@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -39,6 +40,7 @@ import com.pianokids.game.viewmodel.LevelViewModel
 import com.pianokids.game.R
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.pianokids.game.utils.components.LevelCompletedDialog
 import com.pianokids.game.view.components.PianoKeyboard
@@ -47,8 +49,12 @@ import androidx.compose.ui.platform.LocalContext
 import com.pianokids.game.utils.PitchDetector
 import com.pianokids.game.utils.UserPreferences
 import com.pianokids.game.utils.components.AvatarImageView
+import com.pianokids.game.utils.AudioPreviewPlayer
+import com.pianokids.game.view.components.AudioPreviewScreen
 import android.util.Log
 import com.pianokids.game.viewmodel.AvatarViewModel
+import com.pianokids.game.view.components.FallingNotesView
+import kotlinx.coroutines.delay
 
 @Composable
 fun LevelScreen(
@@ -63,6 +69,7 @@ fun LevelScreen(
     val state = viewModel.uiState.collectAsState().value
     val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
     var showIntro by remember { mutableStateOf(true) }
+    var showPreview by remember { mutableStateOf(false) }  // Audio preview phase
     var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
     var showSuccessDialog by remember { mutableStateOf(false) }
 
@@ -72,9 +79,9 @@ fun LevelScreen(
         viewModel.loadLevel(levelId)
     }
 
-    // Start/Stop pitch detection based on mode
-    LaunchedEffect(selectedMode, showIntro) {
-        if (selectedMode == PianoMode.REAL_PIANO && !showIntro) {
+    // Start/Stop pitch detection based on mode and preview state
+    LaunchedEffect(selectedMode, showIntro, showPreview) {
+        if (selectedMode == PianoMode.REAL_PIANO && !showIntro && !showPreview) {
             // Start listening when in real piano mode and all dialogs finished
             PitchDetector.startListening(context) { detectedNote ->
                 // Normalize the detected note
@@ -86,9 +93,17 @@ fun LevelScreen(
         }
     }
 
+    LaunchedEffect(state.isFailed) {
+        if (state.isFailed) {
+            delay(1500)
+            viewModel.loadLevel(levelId)
+        }
+    }
+
     // Cleanup when leaving screen
     DisposableEffect(Unit) {
         onDispose {
+            AudioPreviewPlayer.release()
             if (PitchDetector.isActive()) {
                 PitchDetector.stopListening()
             }
@@ -116,6 +131,42 @@ fun LevelScreen(
     }
 
     val level = state.currentLevel
+
+    // Audio preview state
+    val audioPreviewUrl = level.previewAudioUrl
+    val isAudioPlaying by AudioPreviewPlayer.isPlaying.collectAsState()
+    val isAudioLoading by AudioPreviewPlayer.isLoading.collectAsState()
+    val audioCurrentPosition by AudioPreviewPlayer.currentPosition.collectAsState()
+    val audioDuration by AudioPreviewPlayer.duration.collectAsState()
+    val audioProgress = if (audioDuration > 0) {
+        audioCurrentPosition.toFloat() / audioDuration.toFloat()
+    } else {
+        0f
+    }
+
+    // Start audio preview after intro
+    LaunchedEffect(showIntro, audioPreviewUrl) {
+        if (!showIntro && audioPreviewUrl != null && !showPreview) {
+            showPreview = true
+            AudioPreviewPlayer.prepare(
+                context = context,
+                audioUrl = audioPreviewUrl,
+                onReady = {
+                    if (level.autoPlayPreview) {
+                        AudioPreviewPlayer.play()
+                    }
+                },
+                onComplete = {
+                    // Auto-transition to gameplay after preview completes
+                    showPreview = false
+                },
+                onError = { error ->
+                    Log.e("LevelScreen", "Audio preview error: $error")
+                    showPreview = false // Skip to gameplay on error
+                }
+            )
+        }
+    }
 
     // ANIMATIONS (always define these)
     val shakeOffset by animateFloatAsState(
@@ -156,10 +207,38 @@ fun LevelScreen(
     )
 
     // -------------------------------------------------------------
-    // MAIN UI - Only show when dialogs are closed
+    // AUDIO PREVIEW PHASE - Show before gameplay
     // -------------------------------------------------------------
-    if (!showIntro && selectedMode != null) {
+    if (!showIntro && showPreview && audioPreviewUrl != null) {
+        AudioPreviewScreen(
+            levelTitle = level.title,
+            theme = level.theme,
+            isPlaying = isAudioPlaying,
+            isLoading = isAudioLoading,
+            progress = audioProgress,
+            onPlayPause = {
+                if (isAudioPlaying) {
+                    AudioPreviewPlayer.pause()
+                } else {
+                    AudioPreviewPlayer.play()
+                }
+            },
+            onSkip = {
+                AudioPreviewPlayer.stop()
+                showPreview = false
+            }
+        )
+        return
+    }
+
+    // -------------------------------------------------------------
+    // MAIN UI - Only show when dialogs and preview are closed
+    // -------------------------------------------------------------
+    if (!showIntro && !showPreview && selectedMode != null) {
         Box(modifier = Modifier.fillMaxSize()) {
+
+            val fallingAreaTopPadding = 96.dp
+            val fallingAreaBottomPadding = if (selectedMode == PianoMode.APP_PIANO) 260.dp else 190.dp
 
             // BACKGROUND with dark overlay for better contrast
             AsyncImage(
@@ -181,6 +260,24 @@ fun LevelScreen(
                                 Color.Black.copy(alpha = 0.8f)
                             )
                         )
+                    )
+            )
+
+            // Falling notes overlay spans most of the screen area (behind UI)
+            val noteDurations = state.noteDurations.ifEmpty { List(level.expectedNotes.size) { 1f } }
+
+            FallingNotesView(
+                expectedNotes = level.expectedNotes,
+                currentNoteIndex = state.currentNoteIndex,
+                noteDurations = noteDurations,
+                onNoteHit = { /* visuals only */ },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = 28.dp,
+                        end = 28.dp,
+                        top = fallingAreaTopPadding,
+                        bottom = fallingAreaBottomPadding
                     )
             )
 
@@ -258,135 +355,319 @@ fun LevelScreen(
                         .fillMaxWidth()
                         .padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
 
-                    Box(
+                    // HERO CARD + MESSAGE
+                    Row(
                         modifier = Modifier
                             .offset(x = avatarOffsetX)
-                            .size(width = 170.dp, height = 240.dp)
-                            .border(
-                                width = 3.dp,
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xFF00D9FF),
-                                        Color(0xFF667EEA)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(24.dp)
-                            )
-                            .clip(RoundedCornerShape(24.dp))
+                            .padding(end = 8.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Background for hero card
-                        val avatarUrl = activeAvatar?.avatarImageUrl
-                            ?: userPrefs.getAvatarThumbnail()
-
-                        if (!avatarUrl.isNullOrBlank()) {
-                            Log.d("LevelScreenAvatar", "Using avatar image in HERO card: '$avatarUrl'")
-
-                            // Avatar image filling the card
-                            AsyncImage(
-                                model = avatarUrl,
-                                contentDescription = "Hero Avatar",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Log.d(
-                                "LevelScreenAvatar",
-                                "No avatar URL found. Falling back to emoji."
-                            )
-
-                            // Fallback emoji background
-                            Box(
+                        Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
+                                    .size(width = 170.dp, height = 240.dp)
+                                    .border(
+                                        width = 3.dp,
                                         brush = Brush.verticalGradient(
                                             colors = listOf(
-                                                Color(0xFF667EEA).copy(alpha = 0.3f),
-                                                Color(0xFF00D9FF).copy(alpha = 0.3f)
+                                                Color(0xFF00D9FF),
+                                                Color(0xFF667EEA)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(24.dp)
+                                    )
+                                    .clip(RoundedCornerShape(24.dp))
+                            ) {
+                            // Background for hero card
+                            val avatarUrl = activeAvatar?.avatarImageUrl
+                                ?: userPrefs.getAvatarThumbnail()
+
+                            if (!avatarUrl.isNullOrBlank()) {
+                                Log.d("LevelScreenAvatar", "Using avatar image in HERO card: '$avatarUrl'")
+
+                                // Avatar image filling the card
+                                AsyncImage(
+                                    model = avatarUrl,
+                                    contentDescription = "Hero Avatar",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Log.d(
+                                    "LevelScreenAvatar",
+                                    "No avatar URL found. Falling back to emoji."
+                                )
+
+                                // Fallback emoji background
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color(0xFF667EEA).copy(alpha = 0.3f),
+                                                    Color(0xFF00D9FF).copy(alpha = 0.3f)
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🦸", fontSize = 80.sp)
+                                }
+                            }
+
+                            // Hero label overlay (matching Boss style)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Transparent,
+                                                Color.Black.copy(alpha = 0.7f)
                                             )
                                         )
-                                    ),
-                                contentAlignment = Alignment.Center
+                                    )
+                                    .align(Alignment.BottomCenter)
+                                    .padding(8.dp)
                             ) {
-                                Text("🦸", fontSize = 80.sp)
+                                Text(
+                                    "HERO",
+                                    color = Color(0xFF00D9FF),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.align(Alignment.Center)
+                                )
+                            }
+
+                            // Optional: Status indicator in top corner
+                            if (!avatarUrl.isNullOrBlank()) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .size(24.dp)
+                                        .background(
+                                            Color(0xFF4CAF50).copy(alpha = 0.9f),
+                                            CircleShape
+                                        )
+                                        .border(
+                                            width = 2.dp,
+                                            color = Color.White,
+                                            shape = CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "✓",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
 
-                        // Hero label overlay (matching Boss style)
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            Color.Black.copy(alpha = 0.7f)
-                                        )
-                                    )
-                                )
-                                .align(Alignment.BottomCenter)
-                                .padding(8.dp)
+                        AnimatedVisibility(
+                            visible = state.feedbackMessage != null,
+                            enter = fadeIn() + scaleIn(),
+                            exit = fadeOut() + scaleOut()
                         ) {
-                            Text(
-                                "HERO",
-                                color = Color(0xFF00D9FF),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.align(Alignment.Center)
+                            HeroSpeechBubble(
+                                message = state.feedbackMessage.orEmpty(),
+                                isPositive = state.isFeedbackPositive
                             )
                         }
+                    }
 
-                        // Optional: Status indicator in top corner
-                        if (!avatarUrl.isNullOrBlank()) {
+                    // BOSS (Villain) WITH SPEECH BUBBLE
+                    Column(
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        // Speech bubble - appears above boss
+                        AnimatedVisibility(
+                            visible = state.wrongMessage != null,
+                            enter = scaleIn() + fadeIn(),
+                            exit = scaleOut() + fadeOut()
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .size(24.dp)
-                                    .background(
-                                        Color(0xFF4CAF50).copy(alpha = 0.9f),
-                                        CircleShape
-                                    )
-                                    .border(
-                                        width = 2.dp,
+                                    .width(200.dp)
+                                    .padding(bottom = 8.dp, end = 10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .shadow(6.dp, RoundedCornerShape(16.dp))
+                                        .background(
+                                            Color(0xFFFF5E62),
+                                            RoundedCornerShape(16.dp)
+                                        )
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = state.wrongMessage ?: "",
                                         color = Color.White,
-                                        shape = CircleShape
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Boss card
+                        Box(
+                            modifier = Modifier
+                                .offset(x = bossOffsetX)
+                                .size(width = 170.dp, height = 240.dp)
+                                .shadow(12.dp, RoundedCornerShape(24.dp))
+                                .border(
+                                    width = 3.dp,
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFFFF6B9D),
+                                            Color(0xFFFF5E62)
+                                        )
                                     ),
-                                contentAlignment = Alignment.Center
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .clip(RoundedCornerShape(24.dp))
+                        ) {
+                            AsyncImage(
+                                model = level.bossUrl,
+                                contentDescription = "Boss",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+
+                            // Boss label overlay
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                Color.Transparent,
+                                                Color.Black.copy(alpha = 0.7f)
+                                            )
+                                        )
+                                    )
+                                    .align(Alignment.BottomCenter)
+                                    .padding(8.dp)
                             ) {
                                 Text(
-                                    text = "✓",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    "BOSS",
+                                    color = Color(0xFFFF6B9D),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.align(Alignment.Center)
                                 )
                             }
                         }
                     }
+                }
 
+                Spacer(modifier = Modifier.height(16.dp))
 
-
-
-                    // BOSS (Villain)
+                // --------------------------
+                // PROGRESS BAR (Enhanced with cards)
+                // --------------------------
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(x = shakeOffset.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Hero mini card
                     Box(
                         modifier = Modifier
-                            .offset(x = bossOffsetX)
-                            .size(width = 170.dp, height = 240.dp)
-                            .shadow(12.dp, RoundedCornerShape(24.dp))
-                            .border(
-                                width = 3.dp,
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xFFFF6B9D),
-                                        Color(0xFFFF5E62)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(24.dp)
+                            .size(50.dp)
+                            .border(2.dp, Color(0xFF00D9FF), RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                    ) {
+                        if (!activeAvatar?.avatarImageUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = activeAvatar?.avatarImageUrl,
+                                contentDescription = "Hero",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
-                            .clip(RoundedCornerShape(24.dp))
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0xFF667EEA)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("🦸", fontSize = 28.sp)
+                            }
+                        }
+                    }
+                    
+                    // Progress bar
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Progress: ${(state.progressPercentage * 100).toInt()}%",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(24.dp)
+                                .shadow(8.dp, RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.Black.copy(alpha = 0.5f))
+                                .border(
+                                    width = 2.dp,
+                                    color = Color(0xFF00D9FF).copy(alpha = 0.3f),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                .drawBehind {
+                                    if (state.showWrongAnimation) {
+                                        drawRoundRect(
+                                            color = Color.Red,
+                                            size = size,
+                                            cornerRadius = CornerRadius(12f, 12f),
+                                            style = Stroke(width = 3f)
+                                        )
+                                    }
+                                }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(state.progressPercentage)
+                                    .background(
+                                        brush = Brush.horizontalGradient(
+                                            colors = listOf(
+                                                Color(0xFF00D9FF),
+                                                Color(0xFF667EEA),
+                                                Color(0xFF764BA2)
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                            )
+                        }
+                    }
+                    
+                    // Boss mini card
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .border(2.dp, Color(0xFFFF6B9D), RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
                     ) {
                         AsyncImage(
                             model = level.bossUrl,
@@ -394,203 +675,10 @@ fun LevelScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
-
-                        // Boss label overlay
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            Color.Black.copy(alpha = 0.7f)
-                                        )
-                                    )
-                                )
-                                .align(Alignment.BottomCenter)
-                                .padding(8.dp)
-                        ) {
-                            Text(
-                                "BOSS",
-                                color = Color(0xFFFF6B9D),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.align(Alignment.Center)
-                            )
-                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // --------------------------
-                // PROGRESS BAR (Enhanced)
-                // --------------------------
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(x = shakeOffset.dp)
-                ) {
-                    Text(
-                        text = "Progress: ${(state.progressPercentage * 100).toInt()}%",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(20.dp)
-                            .shadow(6.dp, RoundedCornerShape(10.dp))
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.Black.copy(alpha = 0.4f))
-                            .drawBehind {
-                                if (state.showWrongAnimation) {
-                                    drawRoundRect(
-                                        color = Color.Red,
-                                        size = size,
-                                        cornerRadius = CornerRadius(10f, 10f),
-                                        style = Stroke(width = 4f)
-                                    )
-                                }
-                            }
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth(state.progressPercentage)
-                                .background(
-                                    brush = Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color(0xFF00D9FF),
-                                            Color(0xFF667EEA),
-                                            Color(0xFF764BA2)
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(10.dp)
-                                )
-                        )
-                    }
-                }
-
-                // WRONG NOTE MESSAGE
-                AnimatedVisibility(
-                    visible = state.wrongMessage != null,
-                    enter = scaleIn() + fadeIn(),
-                    exit = scaleOut() + fadeOut()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .shadow(8.dp, RoundedCornerShape(16.dp))
-                                .background(
-                                    Color(0xFFFF5E62).copy(alpha = 0.9f),
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .padding(horizontal = 24.dp, vertical = 12.dp)
-                        ) {
-                            Text(
-                                text = state.wrongMessage ?: "",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // --------------------------
-                // NEXT NOTE (Enhanced)
-                // --------------------------
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val nextNoteText = if (state.currentNoteIndex < level.expectedNotes.size) {
-                        level.expectedNotes[state.currentNoteIndex]
-                    } else {
-                        "🎉"
-                    }
-
-                    // Batman-themed solfege mapping
-                    val batmanSolfege = mapOf(
-                        "Do" to "🦇 BAT",
-                        "Ré" to "🌃 DARK",
-                        "Mi" to "⚔️ KNIGHT",
-                        "Fa" to "🦸 HERO",
-                        "Sol" to "🏙️ GOTHAM",
-                        "La" to "🧥 CAPE",
-                        "Si" to "💡 SIGNAL"
-                    )
-
-                    val displayNote = if (level.theme == "Batman") {
-                        batmanSolfege[nextNoteText] ?: nextNoteText
-                    } else {
-                        nextNoteText
-                    }
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (level.theme == "Batman") "PLAY THE SIGNAL" else "Next Note",
-                            color = if (level.theme == "Batman") Color(0xFFFFD700) else Color.White.copy(alpha = 0.7f),
-                            fontSize = if (level.theme == "Batman") 16.sp else 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .scale(pulseScale)
-                                .shadow(16.dp, RoundedCornerShape(20.dp))
-                                .background(
-                                    brush = if (level.theme == "Batman") {
-                                        Brush.linearGradient(
-                                            colors = listOf(
-                                                Color(0xFF1A1A1A),
-                                                Color(0xFF2C2C2C),
-                                                Color(0xFFFFD700).copy(alpha = 0.3f)
-                                            )
-                                        )
-                                    } else {
-                                        Brush.radialGradient(
-                                            colors = listOf(
-                                                Color(0xFF667EEA),
-                                                Color(0xFF764BA2)
-                                            )
-                                        )
-                                    },
-                                    shape = RoundedCornerShape(20.dp)
-                                )
-                                .border(
-                                    width = 2.dp,
-                                    color = if (level.theme == "Batman") Color(0xFFFFD700) else Color.Transparent,
-                                    shape = RoundedCornerShape(20.dp)
-                                )
-                                .padding(horizontal = 32.dp, vertical = 20.dp)
-                        ) {
-                            Text(
-                                text = displayNote,
-                                color = if (level.theme == "Batman") Color(0xFFFFD700) else Color.White,
-                                fontSize = if (level.theme == "Batman") 28.sp else 36.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 // --------------------------
                 // INSTRUMENT SELECTOR (Only for APP_PIANO mode)
@@ -664,27 +752,13 @@ fun LevelScreen(
                         if (state.currentNoteIndex < level.expectedNotes.size) {
                             val expectedNote = level.expectedNotes[state.currentNoteIndex]
 
-                            // Normalize function to handle accents and case
-                            val normalizeString = { s: String ->
-                                s.lowercase()
-                                    .replace("é", "e")
-                                    .replace("è", "e")
-                                    .replace("ê", "e")
-                                    .replace("à", "a")
-                                    .replace("ù", "u")
-                                    .replace("ô", "o")
-                                    .trim()
-                            }
-
-                            val normalizedExpected = normalizeString(expectedNote)
-                            val normalizedSolfege = normalizeString(key.solfege)
-
+                            // Send the raw solfege to viewModel - it will handle normalization
                             // Prevent multiple rapid triggers for the same note
-                            if (normalizedSolfege != lastPlayedNote) {
-                                lastPlayedNote = normalizedSolfege
+                            if (key.solfege != lastPlayedNote) {
+                                lastPlayedNote = key.solfege
 
-                                // Send normalized note to viewModel for comparison
-                                viewModel.onNotePlayed(normalizedSolfege)
+                                // Send to viewModel for comparison (it handles normalization internally)
+                                viewModel.onNotePlayed(key.solfege)
                             }
                         }
                     },
@@ -793,6 +867,32 @@ fun LevelScreen(
 
                 Spacer(modifier = Modifier.height(30.dp))
             }
+
+            if (state.isFailed) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Out of lives!",
+                            color = Color.White,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Restarting the level...",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -830,24 +930,6 @@ fun LevelScreen(
         )
     }
 
-    if (state.isFailed) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("Level Failed!") },
-            text = { Text("You've run out of lives. Try again!") },
-            confirmButton = {
-                Button(onClick = { viewModel.loadLevel(levelId) }) {
-                    Text("🔄 Retry")
-                }
-            },
-            dismissButton = {
-                Button(onClick = onExit) {
-                    Text("Exit")
-                }
-            }
-        )
-    }
-
     // -------------------------------------------------------------
     // DIALOGS - Rendered on top of everything
     // -------------------------------------------------------------
@@ -867,5 +949,59 @@ fun LevelScreen(
                 SoundManager.stopBackgroundMusic()
             }
         )
+    }
+}
+
+@Composable
+private fun HeroSpeechBubble(
+    message: String,
+    isPositive: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val bubbleColor = if (isPositive) Color(0xFFFFF8E1) else Color(0xFFFFEBEE)
+    val borderColor = if (isPositive) Color(0xFFFFC107) else Color(0xFFFF6B6B)
+    val textColor = if (isPositive) Color(0xFF4E342E) else Color(0xFFB71C1C)
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Canvas(
+            modifier = Modifier
+                .size(width = 20.dp, height = 32.dp)
+        ) {
+            val tipPath = Path().apply {
+                moveTo(size.width, size.height / 2f)
+                lineTo(0f, 0f)
+                lineTo(0f, size.height)
+                close()
+            }
+            drawPath(tipPath, color = borderColor)
+
+            val innerPath = Path().apply {
+                moveTo(size.width - 3f, size.height / 2f)
+                lineTo(3f, 3f)
+                lineTo(3f, size.height - 3f)
+                close()
+            }
+            drawPath(innerPath, color = bubbleColor)
+        }
+
+        Box(
+            modifier = Modifier
+                .widthIn(min = 180.dp, max = 240.dp)
+                .shadow(10.dp, RoundedCornerShape(22.dp))
+                .background(bubbleColor, RoundedCornerShape(22.dp))
+                .border(2.dp, borderColor, RoundedCornerShape(22.dp))
+                .padding(horizontal = 18.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = message,
+                color = textColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                lineHeight = 18.sp
+            )
+        }
     }
 }
