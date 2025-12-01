@@ -7,7 +7,6 @@ data class Level(
     val theme: String = "",
     val story: String = "",
     val expectedNotes: List<String> = emptyList(),
-    val difficulty: Int = 1,
     val backgroundUrl: String? = null,
     val bossUrl: String? = null,
     val musicUrl: String? = null,

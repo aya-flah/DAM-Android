@@ -55,6 +55,7 @@ import com.pianokids.game.utils.components.AvatarImageView
 import com.pianokids.game.utils.components.AIAvatarPreviewDialog
 import com.pianokids.game.utils.components.KidFriendlyErrorDialog
 import com.pianokids.game.data.models.AvatarGenerationResponse
+import com.pianokids.game.data.repository.SublevelProgressRepository
 import kotlin.math.sin
 import kotlin.math.cos
 
@@ -96,6 +97,9 @@ fun ProfileScreen(
     // Snackbar state
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    // sublevel stars
+    val maxStarsState = remember { mutableStateOf(0) }
 
     // Load avatars when logged in
     LaunchedEffect(isLoggedIn) {
@@ -166,29 +170,34 @@ fun ProfileScreen(
     val totalStars = remember { mutableStateOf(0) }
 
     // Auto-refresh level and stars periodically while on screen
+    // ⭐ Correct stars logic using sublevels
     LaunchedEffect(Unit) {
+        val repo = LevelRepository()
+        val subProgRepo = SublevelProgressRepository()
+
         while (true) {
-            // Refresh level
-            val currentLevel = when {
-                user != null -> {
-                    val freshUser = userPrefs.getUser()
-                    freshUser?.level ?: user.level
-                }
-                isLoggedIn -> userPrefs.getLevel()
-                else -> 1
+            // 1) Load all levels
+            val levels = repo.getAllLevels() ?: emptyList()
+
+            // 2) For each level, load sublevels & compute stars
+            var earned = 0
+            var available = 0
+
+            for (level in levels) {
+                val sublevels = subProgRepo.getUserSublevels(
+                    user?.id ?: "guest",
+                    level._id
+                ) ?: emptyList()
+
+                earned += sublevels.sumOf { it.starsEarned }
+                available += sublevels.sumOf { it.maxStars }
             }
-            if (currentLevel != userLevel.value) {
-                userLevel.value = currentLevel
-            }
-            
-            // Refresh stars
-            val unlocked = LevelRepository().getUnlockedLevels(user?.id ?: "")
-            val total = unlocked?.levels?.sumOf { it.starsUnlocked } ?: 0
-            if (total != totalStars.value) {
-                totalStars.value = total
-            }
-            
-            kotlinx.coroutines.delay(1000) // Check every 1 second for faster updates
+
+            // Update reactive states
+            if (earned != totalStars.value) totalStars.value = earned
+            if (available != maxStarsState.value) maxStarsState.value = available
+
+            kotlinx.coroutines.delay(1500)
         }
     }
 
@@ -281,7 +290,7 @@ fun ProfileScreen(
             KidsStatsCards(
                 userLevel = userLevel.value,
                 totalStars = totalStars.value,
-                maxStars = maxStars
+                maxStars = maxStarsState.value
             )
 
             Spacer(Modifier.height(24.dp))
@@ -300,7 +309,7 @@ fun ProfileScreen(
                 userEmail = userEmail,
                 userProvider = userProvider,
                 totalStars = totalStars.value,
-                maxStars = maxStars,
+                maxStars = maxStarsState.value,
                 userLevel = userLevel.value
             )
 

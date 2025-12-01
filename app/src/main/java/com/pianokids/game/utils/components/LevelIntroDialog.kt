@@ -33,12 +33,11 @@ import com.pianokids.game.utils.SoundManager
 fun LevelIntroDialog(
     heroImageRes: Int,
     storyText: String,
-    onModeSelected: (PianoMode) -> Unit
+    onFinished: () -> Unit
 ) {
     var typedText by remember { mutableStateOf("") }
-    var showButtons by remember { mutableStateOf(false) }
+    var showChooseButton by remember { mutableStateOf(false) }
     var isVisible by remember { mutableStateOf(false) }
-    var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
     var skipRequested by remember { mutableStateOf(false) }
 
     // Entrance animation trigger
@@ -50,20 +49,20 @@ fun LevelIntroDialog(
     LaunchedEffect(storyText, skipRequested) {
         if (skipRequested) {
             typedText = storyText
-            showButtons = true
+            showChooseButton = true
             return@LaunchedEffect
         }
 
         delay(300)
         typedText = ""
-        showButtons = false
+        showChooseButton = false
 
         for (char in storyText) {
             typedText += char
             SoundManager.playTyping()
             delay(35)
         }
-        showButtons = true
+        showChooseButton = true
     }
 
     // Pulsing glow animation
@@ -75,17 +74,6 @@ fun LevelIntroDialog(
             animation = tween(2000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         )
-    )
-
-    // Button hover effect simulation
-    val appPianoScale by animateFloatAsState(
-        targetValue = if (selectedMode == PianoMode.APP_PIANO) 1.02f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
-    )
-
-    val realPianoScale by animateFloatAsState(
-        targetValue = if (selectedMode == PianoMode.REAL_PIANO) 1.02f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
     )
 
     // BACKDROP WITH GRADIENT
@@ -291,232 +279,22 @@ fun LevelIntroDialog(
                             }
                         }
 
-                        // ENHANCED PIANO MODE SELECTION
-                        AnimatedVisibility(
-                            visible = showButtons,
-                            enter = fadeIn(animationSpec = tween(400)) +
-                                    expandVertically(animationSpec = tween(400))
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                        // START BUTTON
+                        AnimatedVisibility(visible = showChooseButton) {
+                            Button(
+                                onClick = onFinished,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(64.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                             ) {
-                                // Section header
                                 Text(
-                                    text = "Choose Your Instrument",
+                                    "CHOOSE SUBLEVEL",
                                     fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2C3E50),
-                                    modifier = Modifier.padding(bottom = 4.dp)
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
                                 )
-
-                                // Mode selection buttons
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    // APP PIANO CARD
-                                    Card(
-                                        onClick = {
-                                            SoundManager.playClick()
-                                            selectedMode = PianoMode.APP_PIANO
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(140.dp)
-                                            .scale(appPianoScale),
-                                        shape = RoundedCornerShape(20.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (selectedMode == PianoMode.APP_PIANO)
-                                                Color(0xFF667EEA)
-                                            else
-                                                Color(0xFFFFFFFF)
-                                        ),
-                                        elevation = CardDefaults.cardElevation(
-                                            defaultElevation = 0.dp
-                                        ),
-                                        border = BorderStroke(
-                                            width = if (selectedMode == PianoMode.APP_PIANO) 3.dp else 2.dp,
-                                            color = if (selectedMode == PianoMode.APP_PIANO)
-                                                Color(0xFF667EEA)
-                                            else
-                                                Color(0xFF667EEA).copy(alpha = 0.3f)
-                                        )
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    if (selectedMode == PianoMode.APP_PIANO)
-                                                        Brush.verticalGradient(
-                                                            colors = listOf(
-                                                                Color(0xFF667EEA),
-                                                                Color(0xFF764BA2)
-                                                            )
-                                                        )
-                                                    else
-                                                        Brush.verticalGradient(
-                                                            colors = listOf(
-                                                                Color(0xFFFFFFFF),
-                                                                Color(0xFFF5F7FA)
-                                                            )
-                                                        )
-                                                )
-                                                .padding(16.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                Text(
-                                                    text = "🎹",
-                                                    fontSize = 48.sp
-                                                )
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                                Text(
-                                                    text = "App Piano",
-                                                    fontSize = 18.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (selectedMode == PianoMode.APP_PIANO)
-                                                        Color.White
-                                                    else
-                                                        Color(0xFF667EEA)
-                                                )
-                                                Text(
-                                                    text = "Virtual keys",
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = if (selectedMode == PianoMode.APP_PIANO)
-                                                        Color.White.copy(alpha = 0.9f)
-                                                    else
-                                                        Color(0xFF667EEA).copy(alpha = 0.7f)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    // REAL PIANO CARD
-                                    Card(
-                                        onClick = {
-                                            SoundManager.playClick()
-                                            selectedMode = PianoMode.REAL_PIANO
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(140.dp)
-                                            .scale(realPianoScale),
-                                        shape = RoundedCornerShape(20.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (selectedMode == PianoMode.REAL_PIANO)
-                                                Color(0xFF00D9FF)
-                                            else
-                                                Color(0xFFFFFFFF)
-                                        ),
-                                        elevation = CardDefaults.cardElevation(
-                                            defaultElevation = 0.dp
-                                        ),
-                                        border = BorderStroke(
-                                            width = if (selectedMode == PianoMode.REAL_PIANO) 3.dp else 2.dp,
-                                            color = if (selectedMode == PianoMode.REAL_PIANO)
-                                                Color(0xFF00D9FF)
-                                            else
-                                                Color(0xFF00D9FF).copy(alpha = 0.3f)
-                                        )
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .background(
-                                                    if (selectedMode == PianoMode.REAL_PIANO)
-                                                        Brush.verticalGradient(
-                                                            colors = listOf(
-                                                                Color(0xFF00D9FF),
-                                                                Color(0xFF0099CC)
-                                                            )
-                                                        )
-                                                    else
-                                                        Brush.verticalGradient(
-                                                            colors = listOf(
-                                                                Color(0xFFFFFFFF),
-                                                                Color(0xFFF5F7FA)
-                                                            )
-                                                        )
-                                                )
-                                                .padding(16.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(
-                                                horizontalAlignment = Alignment.CenterHorizontally,
-                                                verticalArrangement = Arrangement.Center
-                                            ) {
-                                                Text(
-                                                    text = "🎼",
-                                                    fontSize = 48.sp
-                                                )
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                                Text(
-                                                    text = "My Piano",
-                                                    fontSize = 18.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (selectedMode == PianoMode.REAL_PIANO)
-                                                        Color.White
-                                                    else
-                                                        Color(0xFF00D9FF)
-                                                )
-                                                Text(
-                                                    text = "Physical keyboard",
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = if (selectedMode == PianoMode.REAL_PIANO)
-                                                        Color.White.copy(alpha = 0.9f)
-                                                    else
-                                                        Color(0xFF00D9FF).copy(alpha = 0.7f)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // START BUTTON
-                                Button(
-                                    onClick = {
-                                        SoundManager.playClick()
-                                        selectedMode?.let { onModeSelected(it) }
-                                    },
-                                    enabled = selectedMode != null,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(64.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF4CAF50),
-                                        disabledContainerColor = Color(0xFFBDBDBD)
-                                    ),
-                                    elevation = ButtonDefaults.buttonElevation(
-                                        defaultElevation = 0.dp,
-                                        pressedElevation = 0.dp,
-                                        disabledElevation = 0.dp
-                                    )
-                                ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "START MISSION",
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color.White,
-                                            letterSpacing = 1.5.sp
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Text(
-                                            text = "🚀",
-                                            fontSize = 24.sp
-                                        )
-                                    }
-                                }
                             }
                         }
 

@@ -23,7 +23,6 @@ class LevelRepository {
             null
         }
     }
-
     /**
      * Fetch ONE level by ID (/levels/:levelId)
      */
@@ -38,21 +37,6 @@ class LevelRepository {
             null
         }
     }
-
-    /**
-     * Save user progress (POST /levels/progress)
-     */
-    suspend fun saveProgress(request: LevelProgressRequest): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                val response = RetrofitClient.levelApi.saveLevelProgress(request)
-                response.isSuccessful
-            } catch (e: Exception) {
-                e.printStackTrace()
-                false
-            }
-        }
-
     /**
      * Fetch unlocked levels (/levels/unlocked/:userId)
      */
@@ -67,5 +51,6 @@ class LevelRepository {
                 e.printStackTrace()
                 null
             }
-        }
+    }
+
 }

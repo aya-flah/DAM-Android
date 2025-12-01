@@ -2,6 +2,7 @@ package com.pianokids.game.api
 
 import com.pianokids.game.data.models.Level
 import com.pianokids.game.data.models.LevelProgressRequest
+import com.pianokids.game.data.models.Sublevel
 import com.pianokids.game.data.models.UnlockedLevelsResponse
 import okhttp3.ResponseBody
 import retrofit2.Response

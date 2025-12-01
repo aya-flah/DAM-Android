@@ -165,8 +165,8 @@ class MainActivity : ComponentActivity() {
                                     // Don't do anything - HomeScreen is a root destination
                                     // User should use device back button to exit app
                                 },
-                                onNavigateToLevel = { levelId, userId ->
-                                    navController.navigate("level/$levelId/$userId")
+                                onNavigateToLevel = { levelId ->
+                                    navController.navigate("level/$levelId")
                                 },
                                 onNavigateToMusic = { navController.navigate("music") }
                             )
@@ -191,9 +191,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
-                        composable("level/{levelId}/{userId}") { backStackEntry ->
+                        composable("level/{levelId}") { backStackEntry ->
                             val levelId = backStackEntry.arguments?.getString("levelId") ?: return@composable
-                            val userId = backStackEntry.arguments?.getString("userId") ?: "guest"
+                            val userId = userPrefs.getUser()?.id ?: "guest"
 
                             LevelScreen(
                                 userId = userId,

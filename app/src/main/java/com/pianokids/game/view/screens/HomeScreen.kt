@@ -43,6 +43,8 @@ import com.pianokids.game.data.models.UnlockedLevelItem
 import com.pianokids.game.data.models.getEffectivePosition
 import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.data.repository.AuthRepository
+import com.pianokids.game.data.repository.SublevelProgressRepository
+import com.pianokids.game.data.repository.SublevelRepository
 import com.pianokids.game.ui.theme.*
 import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
@@ -77,7 +79,7 @@ fun HomeScreen(
     onNavigateToProfile: () -> Unit = {},
     onNavigateToAuth: () -> Unit = {},
     onNavigateBack: () -> Unit = {},
-    onNavigateToLevel: (String, String) -> Unit,
+    onNavigateToLevel: (String) -> Unit,
     onNavigateToMusic: () -> Unit = {},
     onNavigateToKaraoke: () -> Unit = {}
 ) {
@@ -87,6 +89,7 @@ fun HomeScreen(
     val authRepository = remember { AuthRepository(context) }
     val socialLoginManager = remember { SocialLoginManager(context) }
     val levelRepository = remember { LevelRepository() }
+    val sublevelProgRepository = remember { SublevelProgressRepository() }
     val scope = rememberCoroutineScope()
 
     var showComingSoonDialog by remember { mutableStateOf(false) }
@@ -161,7 +164,9 @@ fun HomeScreen(
         mutableStateOf<Map<String, UnlockedLevelItem>>(emptyMap())
     }
 
-    val totalStars = progressMap.values.sumOf { it.starsUnlocked }
+// BACKEND-DRIVEN STAR COUNT (SUBLEVEL BASED)
+    var totalStars by remember { mutableStateOf(0) }
+    var maxStars by remember { mutableStateOf(0) }
 
     // Animation offsets
     var waveOffset by remember { mutableStateOf(0f) }
@@ -191,35 +196,66 @@ fun HomeScreen(
     LaunchedEffect(isLoggedIn) {
         isLoading = true
 
+        // 1️⃣ Load all levels
         val allLevels = levelRepository.getAllLevels() ?: emptyList()
-        // Assign sequential order if missing or 0
+
+        // Fix missing or zero `order`
         levels = allLevels.mapIndexed { index, level ->
             if (level.order == 0) level.copy(order = index + 1) else level
         }.sortedBy { it.order }
 
-        // Unlocking logic
-        progressMap =
-            if (isLoggedIn && userId != "guest") {
-                val response = levelRepository.getUnlockedLevels(userId)
-                response?.levels?.associateBy { it.levelId } ?: emptyMap()
-            } else {
-                // Guest: only unlock level 1, with stars=0
-                allLevels.firstOrNull()?.let { lvl ->
-                    mapOf(
-                        lvl._id to UnlockedLevelItem(
-                            levelId = lvl._id,
-                            title = lvl.title,
-                            theme = lvl.theme,
-                            unlocked = true,
-                            starsUnlocked = 0,
-                            backgroundUrl = lvl.backgroundUrl,
-                            bossUrl = lvl.bossUrl,
-                            musicUrl = lvl.musicUrl
-                        )
-                    )
-                } ?: emptyMap()
-            }
+        // 2️⃣ Load user unlock info ONCE (no repetition)
+        val unlockResponse =
+            if (isLoggedIn && userId != "guest")
+                levelRepository.getUnlockedLevels(userId)
+            else null
 
+        val unlockedBackendList = unlockResponse?.levels ?: emptyList()
+
+        // Build a lookup table for quick access
+        val unlockedMapBackend = unlockedBackendList.associateBy { it.levelId }
+
+        // 4️⃣ Build final progress map (Frontend interpretation)
+        progressMap = levels.associate { level ->
+
+            val backend = unlockedMapBackend[level._id]
+
+            val isUnlocked =
+                when {
+                    level.order == 1 -> true // Level 1 always unlocked
+                    isLoggedIn && backend != null -> backend.unlocked
+                    isLoggedIn -> false
+                    else -> false // guest: only level 1 is unlocked, others false
+                }
+
+            val stars = backend?.starsUnlocked ?: 0
+
+            level._id to UnlockedLevelItem(
+                levelId = level._id,
+                title = level.title,
+                theme = level.theme,
+                unlocked = isUnlocked,
+                starsUnlocked = stars,
+                backgroundUrl = level.backgroundUrl,
+                bossUrl = level.bossUrl,
+                musicUrl = level.musicUrl
+            )
+        }
+
+        // sublevel stars
+        var sumStars = 0
+        var sumMaxStars = 0
+
+        for (level in levels) {
+            // Get all sublevels for this level from backend
+            val sublevels = sublevelProgRepository.getUserSublevels(userId, level._id) ?: emptyList()
+
+            sumStars += sublevels.sumOf { it.starsEarned }          // earned
+            sumMaxStars += sublevels.sumOf { it.maxStars }    // possible
+        }
+
+        totalStars = sumStars
+        maxStars = sumMaxStars
 
         isLoading = false
     }
@@ -262,7 +298,7 @@ fun HomeScreen(
                 avatarImageUrl = activeAvatar?.avatarImageUrl,
                 avatarName = activeAvatar?.name,
                 totalStars = totalStars,
-                maxStars = levels.size * 3,
+                maxStars = maxStars,
                 isLoggedIn = isLoggedIn,
                 onBackClick = onNavigateBack,
                 onProfileClick = onNavigateToProfile,
@@ -300,15 +336,9 @@ fun HomeScreen(
                                 SoundManager.playClick()
 
                                 when {
-                                    isGuest && level.order != 1 -> {
-                                        showGuestLimitDialog = true
-                                    }
-                                    !isUnlocked -> {
-                                        showComingSoonDialog = true
-                                    }
-                                    else -> {
-                                        onNavigateToLevel(level._id, userId)
-                                    }
+                                    isGuest && level.order != 1 -> showGuestLimitDialog = true
+                                    !isUnlocked -> showComingSoonDialog = true
+                                    else -> onNavigateToLevel(level._id)
                                 }
                                 SoundManager.playClick()
                             }
@@ -613,18 +643,7 @@ fun MapIsland(
 
                     Spacer(Modifier.height(4.dp))
 
-                    if (isUnlocked) {
-                        Row {
-                            repeat(3) { i ->
-                                Icon(
-                                    Icons.Default.Star,
-                                    contentDescription = null,
-                                    tint = if (i < stars) RainbowYellow else Color.LightGray,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    } else {
+                    if (!isUnlocked) {
                         Text("Locked", fontSize = 9.sp, color = Color.Gray)
                     }
                 }

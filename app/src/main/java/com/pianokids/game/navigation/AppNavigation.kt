@@ -36,8 +36,8 @@ fun AppNavigation(context: Context) {
         composable(Screen.Home.route) {
             HomeScreen(
                 onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
-                onNavigateToLevel = { levelId, userId ->
-                    navController.navigate("level/$levelId/$userId")
+                onNavigateToLevel = { levelId->
+                    navController.navigate("level/$levelId")
                 }
             )
         }

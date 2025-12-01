@@ -4,8 +4,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pianokids.game.data.models.Level
-import com.pianokids.game.data.models.LevelProgressRequest
+import com.pianokids.game.data.models.Sublevel
+import com.pianokids.game.data.models.SublevelProgressRequest
 import com.pianokids.game.data.repository.LevelRepository
+import com.pianokids.game.data.repository.SublevelProgressRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -21,6 +23,8 @@ data class LevelUiState(
     val wrongNoteCount: Int = 0,
     val showWrongAnimation: Boolean = false,
     val wrongMessage: String? = null,
+    val sublevels: List<Sublevel> = emptyList(),
+    val selectedSublevel: Sublevel? = null,
     val score: Int = 0,
     val feedbackMessage: String? = null,
     val isFeedbackPositive: Boolean = true,
@@ -121,7 +125,7 @@ class LevelViewModel : ViewModel() {
                 .replace("♭", "b")  // Flatten symbol
                 .replace("♯", "#")  // Sharp symbol
                 .trim()
-            
+
             // Handle enharmonic equivalents (same note, different names)
             // C# = Db (Do# = Ré♭), D# = Eb (Ré# = Mi♭), etc.
             val enharmonicMap = mapOf(
@@ -133,7 +137,7 @@ class LevelViewModel : ViewModel() {
                 "la#" to "sib",    // A# = Bb (Si♭)
                 // Flat names stay the same
                 "reb" to "reb",
-                "mib" to "mib", 
+                "mib" to "mib",
                 "solb" to "solb",
                 "lab" to "lab",
                 "sib" to "sib",
@@ -144,7 +148,7 @@ class LevelViewModel : ViewModel() {
                 "lab" to "sol#",
                 "sib" to "la#"
             )
-            
+
             // Convert enharmonic equivalents
             return enharmonicMap[normalized] ?: normalized
         }
@@ -167,7 +171,7 @@ class LevelViewModel : ViewModel() {
             val progress = newIndex.toFloat() / expectedNotes.size.toFloat()
 
             // ⭐ Correct → Increase score
-            val newScore = (state.score + 10).coerceAtMost(100)
+            val newScore = (state.score + 25).coerceAtMost(100)
 
             if (newIndex == expectedNotes.size) {
                 // Level completed
@@ -257,31 +261,85 @@ class LevelViewModel : ViewModel() {
         )
     }
 
+    // load sublevels
+    fun loadSublevels(userId: String, levelId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+
+            val response: List<Sublevel>? =
+                sublevelProgressRepo.getUserSublevels(userId, levelId)
+
+            Log.e("DEBUG_SUBLEVELS", "📥 API returned ${response?.size ?: 0} sublevels")
+
+            _uiState.value = _uiState.value.copy(
+                sublevels = response ?: emptyList(),
+                isLoading = false
+            )
+        }
+    }
+
+    fun selectSublevel(sublevel: Sublevel) {
+        expectedNotes = sublevel.notes
+
+        _uiState.value = _uiState.value.copy(
+            selectedSublevel = sublevel,
+            currentNoteIndex = 0,
+            progressPercentage = 0f,
+            isLevelCompleted = false,
+            isFailed = false,
+            wrongNoteCount = 0,
+            score = 0,
+            wrongMessage = null
+        )
+    }
+
     /**
      * Save progress
      */
+    private val sublevelProgressRepo = SublevelProgressRepository()
+
     fun saveProgress(userId: String) {
-        val level = _uiState.value.currentLevel ?: return
+        val state = _uiState.value
+        val level = state.currentLevel ?: return
+        val sublevel = state.selectedSublevel ?: return
 
         viewModelScope.launch {
-            val score = _uiState.value.score
+            val score = state.score
 
             val stars = when {
-                score >= 85 -> 3
+                score >= 70 -> 3
                 score >= 60 -> 2
                 score >= 30 -> 1
                 else -> 0
             }
 
-            repository.saveProgress(
-                LevelProgressRequest(
-                    userId = userId,
-                    levelId = level._id,
-                    stars = stars,
-                    score = score,
-                    completed = true
-                )
+            val request = SublevelProgressRequest(
+                userId = userId,
+                levelId = level._id,
+                sublevelId = sublevel._id,
+                stars = stars,
+                score = score,
+                completed = true
             )
+
+            // THIS RETURNS List<Sublevel>
+            val updatedSubs = sublevelProgressRepo.submitProgress(request)
+
+            if (updatedSubs != null) {
+
+                // update all sublevels
+                _uiState.value = _uiState.value.copy(
+                    sublevels = updatedSubs
+                )
+
+                // update selected one
+                val refreshed = updatedSubs.firstOrNull { it._id == sublevel._id }
+                if (refreshed != null) {
+                    _uiState.value = _uiState.value.copy(
+                        selectedSublevel = refreshed
+                    )
+                }
+            }
         }
     }
 
