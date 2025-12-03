@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                         Log.d("MainActivity", "providerId: ${userPrefs.getProviderId()}")
                         Log.d("MainActivity", "isGuestMode: ${userPrefs.isGuestMode()}")
                         Log.d("MainActivity", "userData: ${userPrefs.getUser()}")
+                        Log.d("MainActivity", "hasKidProfile: ${userPrefs.hasKidProfile()}")
                         
                         // Check if user is logged in
                         val hasToken = userPrefs.hasLocalToken()
@@ -111,11 +112,13 @@ class MainActivity : ComponentActivity() {
                         }
 
                         val isGuest = userPrefs.isGuestMode()
+                        val hasKidProfile = userPrefs.hasKidProfile()
 
                         // Debug logging
                         Log.d("MainActivity", "Has token: $hasToken")
                         Log.d("MainActivity", "Is logged in: $isLoggedIn")
                         Log.d("MainActivity", "Is guest mode: $isGuest")
+                        Log.d("MainActivity", "Has kid profile: $hasKidProfile")
 
                         // Navigation logic: only go to home if explicitly logged in or guest
                         startDestination = when {
@@ -123,6 +126,10 @@ class MainActivity : ComponentActivity() {
                                 // User has valid auth token
                                 Log.d("MainActivity", "Navigation: Going to home (logged in)")
                                 userPrefs.clearGuestMode()
+                                "home"
+                            }
+                            hasKidProfile -> {
+                                Log.d("MainActivity", "Navigation: Going to home (kid profile)")
                                 "home"
                             }
                             isGuest -> {

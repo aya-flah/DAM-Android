@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.data.models.Avatar
+import com.pianokids.game.data.models.KidProfile
 import com.pianokids.game.ui.theme.*
 import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
@@ -58,6 +59,7 @@ import com.pianokids.game.data.models.AvatarGenerationResponse
 import com.pianokids.game.data.repository.SublevelProgressRepository
 import kotlin.math.sin
 import kotlin.math.cos
+import android.graphics.Color as AndroidColor
 
 @Composable
 fun ProfileScreen(
@@ -149,15 +151,23 @@ fun ProfileScreen(
 
     val userName by authViewModel.userName.collectAsState()
     val user = userPrefs.getUser()
+    var kidProfile by remember { mutableStateOf(userPrefs.getKidProfile()) }
+
+    val kidEmailAlias = kidProfile?.uniqueName?.let { "$it@pianokids.fun" }
 
     val userEmail = when {
         user != null -> user.email
         isLoggedIn -> userPrefs.getEmail() ?: ""
+        kidProfile != null -> kidEmailAlias ?: ""
         else -> "Guest Mode 🎮"
     }
 
     val userPhotoUrl = user?.photoUrl
-    val userProvider = user?.provider
+    val userProvider = when {
+        user != null -> user.provider
+        kidProfile != null -> "kid_profile"
+        else -> null
+    }
 
     val userLevel = remember { mutableStateOf(
         when {
@@ -203,6 +213,20 @@ fun ProfileScreen(
 
     val maxStars = 24
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(activeAvatar?.id, activeAvatar?.avatarImageUrl, kidProfile?.uniqueName) {
+        val currentKid = kidProfile ?: return@LaunchedEffect
+        val latestAvatarUrl = activeAvatar?.avatarImageUrl ?: userPrefs.getAvatarThumbnail()
+        if (!latestAvatarUrl.isNullOrBlank() && currentKid.backendAvatarImageUrl != latestAvatarUrl) {
+            val updatedKid = currentKid.copy(
+                backendAvatarId = activeAvatar?.id ?: currentKid.backendAvatarId,
+                backendAvatarName = activeAvatar?.name ?: currentKid.backendAvatarName,
+                backendAvatarImageUrl = latestAvatarUrl
+            )
+            kidProfile = updatedKid
+            userPrefs.saveKidProfile(updatedKid)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -253,6 +277,7 @@ fun ProfileScreen(
                 userName = userName,
                 userPhotoUrl = userPhotoUrl,
                 userProvider = userProvider,
+                kidProfile = kidProfile,
                 activeAvatar = activeAvatar,
                 userPrefs = userPrefs,
                 onClick = {
@@ -270,7 +295,8 @@ fun ProfileScreen(
                 onEditClick = {
                     SoundManager.playClick()
                     showEditNameDialog = true
-                }
+                },
+                kidProfile = kidProfile
             )
 
             Spacer(Modifier.height(16.dp))
@@ -310,7 +336,8 @@ fun ProfileScreen(
                 userProvider = userProvider,
                 totalStars = totalStars.value,
                 maxStars = maxStarsState.value,
-                userLevel = userLevel.value
+                userLevel = userLevel.value,
+                kidProfile = kidProfile
             )
 
             Spacer(Modifier.height(24.dp))
@@ -525,6 +552,7 @@ fun ProfileScreen(
                     authRepository.logout()
                     socialLoginManager.signOutGoogle()
                     socialLoginManager.signOutFacebook()
+                    userPrefs.clearKidProfile()
                     authViewModel.onLogout()
                     onLogout()
                 }
@@ -702,6 +730,7 @@ fun PlayfulProfileAvatar(
     userName: String,
     userPhotoUrl: String?,
     userProvider: String?,
+    kidProfile: KidProfile?,
     activeAvatar: Avatar?,
     userPrefs: UserPreferences,
     onClick: () -> Unit
@@ -768,9 +797,33 @@ fun PlayfulProfileAvatar(
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            val avatarUrl = activeAvatar?.avatarImageUrl ?: userPrefs.getAvatarThumbnail()
+            val kidAvatarUrl = kidProfile?.backendAvatarImageUrl
+            val avatarUrl = when {
+                !kidAvatarUrl.isNullOrBlank() -> kidAvatarUrl
+                kidProfile != null -> null
+                else -> activeAvatar?.avatarImageUrl ?: userPrefs.getAvatarThumbnail()
+            }
 
-            if (avatarUrl != null && avatarUrl.isNotEmpty()) {
+            if (!kidAvatarUrl.isNullOrBlank()) {
+                AvatarImageView(
+                    avatarUrl = kidAvatarUrl,
+                    size = 140,
+                    borderColor = Color.Transparent,
+                    borderWidth = 0
+                )
+            } else if (kidProfile != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(kidProfile.avatarColorHex.toColorOrDefault(Color(0xFF7E57C2))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = kidProfile.avatarEmoji,
+                        fontSize = 56.sp
+                    )
+                }
+            } else if (avatarUrl != null && avatarUrl.isNotEmpty()) {
                 AvatarImageView(
                     avatarUrl = avatarUrl,
                     size = 140,
@@ -808,7 +861,8 @@ fun PlayfulProfileAvatar(
 fun KidsNameSection(
     userName: String,
     userProvider: String?,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    kidProfile: KidProfile?
 ) {
     Card(
         modifier = Modifier
@@ -854,9 +908,18 @@ fun KidsNameSection(
                             color = Color.White
                         )
                     )
+                    if (kidProfile != null) {
+                        Text(
+                            text = "Âge : ${kidProfile.age} ans",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 16.sp
+                            )
+                        )
+                    }
                 }
 
-                if (userProvider != null) {
+                 if (userProvider != null) {
                     FunProviderBadge(provider = userProvider)
                 }
             }
@@ -1208,7 +1271,8 @@ fun KidsAccountInfoCard(
     userProvider: String?,
     totalStars: Int,
     maxStars: Int,
-    userLevel: Int
+    userLevel: Int,
+    kidProfile: KidProfile?
 ) {
     Card(
         modifier = Modifier
@@ -1263,7 +1327,10 @@ fun KidsAccountInfoCard(
             // Details with fun icons
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 FunInfoRow(emoji = "👤", label = "Name", value = userName)
-                FunInfoRow(emoji = "📧", label = "Email", value = userEmail)
+                FunInfoRow(emoji = "📧", label = if (kidProfile != null) "Nom unique" else "Email", value = userEmail)
+                kidProfile?.let {
+                    FunInfoRow(emoji = "🎂", label = "Âge", value = "${it.age} ans")
+                }
                 if (userProvider != null) {
                     FunInfoRow(
                         emoji = "🔐",
@@ -1699,3 +1766,10 @@ fun getLevelEmoji(level: Int): String = when (level) {
     in 8..10 -> "🏆"
     else -> "👑"
 }
+
+private fun String.toColorOrDefault(default: Color): Color = try {
+    Color(AndroidColor.parseColor(this))
+} catch (_: IllegalArgumentException) {
+    default
+}
+

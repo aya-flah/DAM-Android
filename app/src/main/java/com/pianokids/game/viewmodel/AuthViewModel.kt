@@ -80,6 +80,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
             val isGuestMode = userPrefs.isGuestMode()
             Log.d("AuthViewModel", "isGuestMode: $isGuestMode")
+            val hasKidProfile = userPrefs.hasKidProfile()
+            Log.d("AuthViewModel", "hasKidProfile: $hasKidProfile")
 
             val isVerified = if (hasToken) {
                 val verified = authRepo.verifyToken()
@@ -107,10 +109,17 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             val fullName = userPrefs.getFullName()
             Log.d("AuthViewModel", "Full name from prefs: $fullName")
 
+            val kidProfile = userPrefs.getKidProfile()
+            Log.d("AuthViewModel", "Kid profile: $kidProfile")
+
             _userName.value = when {
                 user != null -> {
                     Log.d("AuthViewModel", "Using user.name: ${user.name}")
                     user.name
+                }
+                kidProfile != null -> {
+                    Log.d("AuthViewModel", "Using kid profile name: ${kidProfile.displayName}")
+                    kidProfile.displayName.ifBlank { kidProfile.uniqueName }
                 }
                 _isLoggedIn.value -> {
                     Log.d("AuthViewModel", "Using fullName: $fullName")

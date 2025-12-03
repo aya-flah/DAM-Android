@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.content.edit
 import com.google.gson.Gson
 import com.pianokids.game.data.models.AuthUser
+import com.pianokids.game.data.models.KidProfile
 
 class UserPreferences(private val context: Context) {
     private val prefs: SharedPreferences =
@@ -146,6 +147,71 @@ class UserPreferences(private val context: Context) {
         return prefs.getBoolean(KEY_SEEN_WELCOME, false)
     }
 
+    // ── KID PROFILE ───────────────────────────────────────────────────────
+    fun saveKidProfile(profile: KidProfile) {
+        prefs.edit {
+            putString(KEY_KID_UNIQUE_NAME, profile.uniqueName)
+            putString(KEY_KID_DISPLAY_NAME, profile.displayName)
+            putInt(KEY_KID_AGE, profile.age)
+            putString(KEY_KID_AVATAR_EMOJI, profile.avatarEmoji)
+            putString(KEY_KID_AVATAR_COLOR, profile.avatarColorHex)
+            putString(KEY_KID_BACKEND_AVATAR_ID, profile.backendAvatarId)
+            putString(KEY_KID_BACKEND_AVATAR_NAME, profile.backendAvatarName)
+            putString(KEY_KID_BACKEND_AVATAR_IMAGE, profile.backendAvatarImageUrl)
+            putBoolean(KEY_KID_PROFILE_ACTIVE, true)
+        }
+    }
+
+    fun getKidProfile(): KidProfile? {
+        if (!hasKidProfile()) return null
+
+        val uniqueName = prefs.getString(KEY_KID_UNIQUE_NAME, null) ?: return null
+        val displayName = prefs.getString(KEY_KID_DISPLAY_NAME, null) ?: uniqueName
+        val age = prefs.getInt(KEY_KID_AGE, -1)
+        val emoji = prefs.getString(KEY_KID_AVATAR_EMOJI, "🎵") ?: "🎵"
+        val color = prefs.getString(KEY_KID_AVATAR_COLOR, "#6A5AE0") ?: "#6A5AE0"
+        val backendAvatarId = prefs.getString(KEY_KID_BACKEND_AVATAR_ID, null)
+        val backendAvatarName = prefs.getString(KEY_KID_BACKEND_AVATAR_NAME, null)
+        val backendAvatarImage = prefs.getString(KEY_KID_BACKEND_AVATAR_IMAGE, null)
+
+        if (age == -1) return null
+
+        return KidProfile(
+            uniqueName = uniqueName,
+            displayName = displayName,
+            age = age,
+            avatarEmoji = emoji,
+            avatarColorHex = color,
+            backendAvatarId = backendAvatarId,
+            backendAvatarName = backendAvatarName,
+            backendAvatarImageUrl = backendAvatarImage
+        )
+    }
+
+    fun hasKidProfile(): Boolean {
+        return prefs.getBoolean(KEY_KID_PROFILE_ACTIVE, false)
+                && prefs.getString(KEY_KID_UNIQUE_NAME, null) != null
+    }
+
+    fun clearKidProfile() {
+        prefs.edit {
+            remove(KEY_KID_UNIQUE_NAME)
+            remove(KEY_KID_DISPLAY_NAME)
+            remove(KEY_KID_AGE)
+            remove(KEY_KID_AVATAR_EMOJI)
+            remove(KEY_KID_AVATAR_COLOR)
+            remove(KEY_KID_BACKEND_AVATAR_ID)
+            remove(KEY_KID_BACKEND_AVATAR_NAME)
+            remove(KEY_KID_BACKEND_AVATAR_IMAGE)
+            putBoolean(KEY_KID_PROFILE_ACTIVE, false)
+        }
+    }
+
+    fun getKidEmailAlias(): String? {
+        val uniqueName = prefs.getString(KEY_KID_UNIQUE_NAME, null) ?: return null
+        return "$uniqueName@pianokids.fun"
+    }
+
     // ── GUEST MODE ────────────────────────────────────────────────────────
     fun clearGuestMode() {
         prefs.edit {
@@ -205,5 +271,14 @@ class UserPreferences(private val context: Context) {
         private const val KEY_SEEN_WELCOME = "seen_welcome"
         private const val PREF_IS_GUEST = "is_guest_mode"
         private const val KEY_AVATAR_THUMBNAIL = "avatar_thumbnail"
+        private const val KEY_KID_PROFILE_ACTIVE = "kid_profile_active"
+        private const val KEY_KID_UNIQUE_NAME = "kid_unique_name"
+        private const val KEY_KID_DISPLAY_NAME = "kid_display_name"
+        private const val KEY_KID_AGE = "kid_age"
+        private const val KEY_KID_AVATAR_EMOJI = "kid_avatar_emoji"
+        private const val KEY_KID_AVATAR_COLOR = "kid_avatar_color"
+        private const val KEY_KID_BACKEND_AVATAR_ID = "kid_backend_avatar_id"
+        private const val KEY_KID_BACKEND_AVATAR_NAME = "kid_backend_avatar_name"
+        private const val KEY_KID_BACKEND_AVATAR_IMAGE = "kid_backend_avatar_image"
     }
 }

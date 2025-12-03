@@ -15,7 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +27,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +44,9 @@ import com.pianokids.game.R
 import com.pianokids.game.data.models.Level
 import com.pianokids.game.data.models.UnlockedLevelItem
 import com.pianokids.game.data.models.getEffectivePosition
+import com.pianokids.game.data.models.KidProfile
+import com.pianokids.game.data.models.Avatar
+import com.pianokids.game.data.models.AvatarCustomization
 import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.data.repository.SublevelProgressRepository
@@ -54,6 +60,7 @@ import com.pianokids.game.viewmodel.AvatarViewModel
 import com.pianokids.game.utils.components.AvatarCreationDialog
 import com.pianokids.game.utils.components.AIAvatarPreviewDialog
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 import kotlin.math.sin
 
 // ---- Ocean Clouds Data ----
@@ -91,11 +98,13 @@ fun HomeScreen(
     val levelRepository = remember { LevelRepository() }
     val sublevelProgRepository = remember { SublevelProgressRepository() }
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
     var showComingSoonDialog by remember { mutableStateOf(false) }
     var showGuestLimitDialog by remember { mutableStateOf(false) }
     var showLoginDialog by remember { mutableStateOf(false) }
     var showCreateAvatarDialog by remember { mutableStateOf(false) }
+    var resumeAvatarFlowAfterLogin by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
@@ -104,9 +113,13 @@ fun HomeScreen(
     val authViewModel: AuthViewModel = viewModel()
     val avatarViewModel: AvatarViewModel = viewModel()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+    var kidProfile by remember { mutableStateOf(userPrefs.getKidProfile()) }
 
-    // Handle device back button - exit app when on HomeScreen
-    BackHandler {
+    // Handle device back button - close drawer first, otherwise exit
+    BackHandler(enabled = drawerState.isOpen) {
+        scope.launch { drawerState.close() }
+    }
+    BackHandler(enabled = !drawerState.isOpen) {
         activity?.finish()
     }
 
@@ -114,6 +127,10 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val avatarError by avatarViewModel.error.collectAsState()
     val activeAvatar by avatarViewModel.activeAvatar.collectAsState()
+
+    LaunchedEffect(isLoggedIn, activeAvatar?.id) {
+        kidProfile = userPrefs.getKidProfile()
+    }
     
     // AI Avatar Generation states
     val isGeneratingAI by avatarViewModel.isGeneratingAI.collectAsState()
@@ -269,13 +286,58 @@ fun HomeScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // 1. ANIMATED OCEAN WITH CLOUDS AND BIRDS
-        OceanMapBackground(
-            waveOffset = waveOffset,
-            cloudOffset = cloudOffset,
-            birdOffset = birdOffset
-        )
+    val headerAvatarUrl = activeAvatar?.avatarImageUrl
+        ?: kidProfile?.backendAvatarImageUrl
+        ?: userPrefs.getAvatarThumbnail()
+    val headerAvatarName = activeAvatar?.name ?: kidProfile?.backendAvatarName
+    val fallbackAvatarEmoji = kidProfile?.avatarEmoji ?: "🎹"
+    val avatarAccentColor = remember(activeAvatar, kidProfile?.avatarColorHex, fallbackAvatarEmoji) {
+        activeAvatar?.customization?.accentColor()
+            ?: kidProfile?.avatarColorHex?.toColorOrNull()
+            ?: activeAvatar?.accentIdColor()
+            ?: fallbackAvatarEmoji.toAccentPaletteColor()
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        scrimColor = avatarAccentColor.copy(alpha = 0.25f),
+        drawerContent = {
+            HomeProfileDrawer(
+                userName = userName,
+                avatarImageUrl = headerAvatarUrl,
+                avatarName = headerAvatarName,
+                fallbackEmoji = fallbackAvatarEmoji,
+                isLoggedIn = isLoggedIn,
+                accentColor = avatarAccentColor,
+                onProfileClick = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToProfile()
+                },
+                onRecognizeClick = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToMusic()
+                },
+                onAddAvatarClick = {
+                    scope.launch { drawerState.close() }
+                    if (isLoggedIn) {
+                        resumeAvatarFlowAfterLogin = false
+                        showCreateAvatarDialog = true
+                    } else {
+                        resumeAvatarFlowAfterLogin = true
+                        showLoginDialog = true
+                    }
+                }
+            )
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 1. ANIMATED OCEAN WITH CLOUDS AND BIRDS
+            OceanMapBackground(
+                waveOffset = waveOffset,
+                cloudOffset = cloudOffset,
+                birdOffset = birdOffset
+            )
 
         // Loading overlay
         if (isLoading) {
@@ -291,21 +353,22 @@ fun HomeScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
 
-            // ---- HEADER ----
             CompactGameHeader(
                 userName = userName,
                 userPhotoUrl = userPhotoUrl,
-                avatarImageUrl = activeAvatar?.avatarImageUrl,
-                avatarName = activeAvatar?.name,
+                avatarImageUrl = headerAvatarUrl,
+                avatarName = headerAvatarName,
+                fallbackEmoji = fallbackAvatarEmoji,
                 totalStars = totalStars,
                 maxStars = maxStars,
                 isLoggedIn = isLoggedIn,
-                onBackClick = onNavigateBack,
-                onProfileClick = onNavigateToProfile,
-                onAddAvatarClick = if (isLoggedIn) {
-                    { showCreateAvatarDialog = true }
-                } else null,
-                onMusicClick = onNavigateToMusic
+                accentColor = avatarAccentColor,
+                onAvatarClick = {
+                    SoundManager.playClick()
+                    scope.launch {
+                        if (drawerState.isOpen) drawerState.close() else drawerState.open()
+                    }
+                }
             )
 
             // ---- MAP ----
@@ -351,26 +414,49 @@ fun HomeScreen(
         // ---- DIALOGS ----
         if (showLoginDialog) {
             LoginChooserDialog(
-                onDismiss = { showLoginDialog = false },
+                onDismiss = {
+                    showLoginDialog = false
+                    resumeAvatarFlowAfterLogin = false
+                },
                 onGoogleClick = {
                     isLoading = true
                     socialLoginManager.signInWithGoogle(
                         launcher = googleSignInLauncher,
                         onSuccess = { idToken ->
                             scope.launch {
-                                val result =
-                                    authRepository.loginWithSocial(token = idToken, provider = "google")
+                                val result = authRepository.loginWithSocial(
+                                    token = idToken,
+                                    provider = "google"
+                                )
                                 isLoading = false
-                                result.onSuccess {
+                                if (result.isSuccess) {
                                     authViewModel.onLoginSuccess()
                                     showLoginDialog = false
+                                    if (resumeAvatarFlowAfterLogin) {
+                                        resumeAvatarFlowAfterLogin = false
+                                        showCreateAvatarDialog = true
+                                    }
+                                } else {
+                                    val errorMessage = result.exceptionOrNull()?.message
+                                        ?: "Google login failed"
+                                    snackbarHostState.showSnackbar(
+                                        message = errorMessage,
+                                        duration = SnackbarDuration.Short
+                                    )
                                 }
                             }
                         },
-                        onFailure = { isLoading = false }
+                        onFailure = { error ->
+                            isLoading = false
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    message = error.message ?: "Google login unavailable",
+                                    duration = SnackbarDuration.Short
+                                )
+                            }
+                        }
                     )
                 },
-
                 onFacebookClick = {
                     activity?.let { act ->
                         isLoading = true
@@ -383,13 +469,32 @@ fun HomeScreen(
                                         provider = "facebook"
                                     )
                                     isLoading = false
-                                    result.onSuccess {
+                                    if (result.isSuccess) {
                                         authViewModel.onLoginSuccess()
                                         showLoginDialog = false
+                                        if (resumeAvatarFlowAfterLogin) {
+                                            resumeAvatarFlowAfterLogin = false
+                                            showCreateAvatarDialog = true
+                                        }
+                                    } else {
+                                        val errorMessage = result.exceptionOrNull()?.message
+                                            ?: "Facebook login failed"
+                                        snackbarHostState.showSnackbar(
+                                            message = errorMessage,
+                                            duration = SnackbarDuration.Short
+                                        )
                                     }
                                 }
                             },
-                            onFailure = { isLoading = false }
+                            onFailure = { error ->
+                                isLoading = false
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        message = error.message ?: "Facebook login unavailable",
+                                        duration = SnackbarDuration.Short
+                                    )
+                                }
+                            }
                         )
                     }
                 }
@@ -552,6 +657,190 @@ fun HomeScreen(
                 contentColor = Color(0xFF667EEA),
                 shape = RoundedCornerShape(12.dp)
             )
+        }
+    }
+}
+
+}
+
+
+@Composable
+fun HomeProfileDrawer(
+    userName: String,
+    avatarImageUrl: String?,
+    avatarName: String?,
+    fallbackEmoji: String,
+    isLoggedIn: Boolean,
+    accentColor: Color,
+    onProfileClick: () -> Unit,
+    onRecognizeClick: () -> Unit,
+    onAddAvatarClick: () -> Unit
+) {
+    val drawerBackground = accentColor.mixWith(Color.Black, 0.55f)
+    val avatarFrameColor = accentColor.mixWith(Color.White, 0.25f)
+
+    ModalDrawerSheet(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(320.dp),
+        drawerContainerColor = drawerBackground,
+        drawerContentColor = Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(112.dp)
+                            .clip(CircleShape)
+                            .background(avatarFrameColor.copy(alpha = 0.15f))
+                            .border(
+                                width = 3.dp,
+                                color = avatarFrameColor,
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val displayUrl = avatarImageUrl
+                        if (displayUrl != null) {
+                            AsyncImage(
+                                model = displayUrl,
+                                contentDescription = "Active avatar",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(text = fallbackEmoji, fontSize = 42.sp)
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (userName.isBlank()) "Hey there!" else "Hi, $userName",
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        )
+                        Text(
+                            text = when {
+                                !isLoggedIn -> "Sign in to save your music journey"
+                                avatarName != null -> "Avatar: $avatarName"
+                                else -> "Create an avatar to join the band"
+                            },
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = Color.White.copy(alpha = 0.75f)
+                            )
+                        )
+                    }
+                }
+
+                Divider(color = Color.White.copy(alpha = 0.18f))
+
+                DrawerActionButton(
+                    icon = Icons.Default.Person,
+                    label = "Profile",
+                    description = "View progress & settings",
+                    accentColor = RainbowBlue
+                ) {
+                    SoundManager.playClick()
+                    onProfileClick()
+                }
+
+                DrawerActionButton(
+                    icon = Icons.Default.GraphicEq,
+                    label = "Recognize",
+                    description = "Identify what you're playing",
+                    accentColor = RainbowIndigo
+                ) {
+                    SoundManager.playClick()
+                    onRecognizeClick()
+                }
+
+                DrawerActionButton(
+                    icon = Icons.Default.Add,
+                    label = if (isLoggedIn) "Add Avatar" else "Sign In & Add Avatar",
+                    description = if (isLoggedIn) "Create a new hero" else "Tap to unlock custom avatars",
+                    accentColor = RainbowPink
+                ) {
+                    SoundManager.playClick()
+                    onAddAvatarClick()
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = "Need help?",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                )
+                Text(
+                    text = "support@pianokids.app",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerActionButton(
+    icon: ImageVector,
+    label: String,
+    description: String,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .clickable(onClick = onClick),
+        color = Color.White.copy(alpha = 0.08f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                )
+            }
         }
     }
 }
@@ -835,193 +1124,215 @@ fun CompactGameHeader(
     userPhotoUrl: String?,
     avatarImageUrl: String?,
     avatarName: String?,
+    fallbackEmoji: String = "🎹",
     totalStars: Int,
     maxStars: Int,
     isLoggedIn: Boolean,
-    onBackClick: () -> Unit,
-    onProfileClick: () -> Unit,
-    onAddAvatarClick: (() -> Unit)? = null,
-    onMusicClick: (() -> Unit)? = null
+    accentColor: Color,
+    onAvatarClick: () -> Unit
 ) {
+    val displayImageUrl = avatarImageUrl ?: userPhotoUrl
+    val starProgress = if (maxStars <= 0) 0f else totalStars.toFloat() / maxStars.toFloat()
+    val headerGradient = listOf(
+        accentColor.mixWith(Color.Black, 0.4f),
+        accentColor,
+        accentColor.mixWith(Color.White, 0.3f)
+    )
+    val borderColor = accentColor.mixWith(Color.White, 0.4f)
+    val badgeColor = accentColor.mixWith(Color.White, 0.5f)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 25.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
-        elevation = CardDefaults.cardElevation(6.dp)
+            .padding(horizontal = 12.dp, vertical = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .clip(RoundedCornerShape(28.dp))
+                .background(brush = Brush.linearGradient(headerGradient))
+                .border(1.5.dp, borderColor.copy(alpha = 0.4f), RoundedCornerShape(28.dp))
+                .padding(horizontal = 18.dp, vertical = 16.dp)
         ) {
-            IconButton(
-                onClick = { SoundManager.playClick(); onBackClick() },
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(RainbowBlue.copy(alpha = 0.2f))
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
-                    tint = RainbowBlue,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(45.dp)
-                        .clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(RainbowOrange, RainbowPink)))
-                        .clickable(onClick = onProfileClick),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Prioritize avatar image, then Google photo, then default emoji
-                    val displayImageUrl = avatarImageUrl ?: userPhotoUrl
-                    if (displayImageUrl != null) {
-                        AsyncImage(
-                            model = displayImageUrl,
-                            contentDescription = "Profile",
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Text(text = "🎹", fontSize = 24.sp)
-                    }
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = userName,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        ),
-                        maxLines = 1
-                    )
-                    if (!isLoggedIn) {
-                        Text(
-                            text = "Guest Mode",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.sp,
-                                color = RainbowOrange
-                            )
-                        )
-                    } else if (avatarName != null) {
-                        Text(
-                            text = "Avatar: $avatarName",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.sp,
-                                color = RainbowBlue
-                            )
-                        )
-                    }
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Music Recognition Button
-                if (onMusicClick != null) {
-                    Button(
-                        onClick = {
-                            SoundManager.playClick()
-                            onMusicClick()
-                        },
-                        modifier = Modifier.height(36.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = RainbowIndigo.copy(alpha = 0.2f),
-                            contentColor = RainbowIndigo
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Text(
-                            text = "🎵",
-                            fontSize = 16.sp
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Recognize",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        )
-                    }
-                }
-
-                // Add Avatar Button (only for logged in users)
-                if (isLoggedIn && onAddAvatarClick != null) {
-                    Button(
-                        onClick = {
-                            SoundManager.playClick()
-                            onAddAvatarClick()
-                        },
-                        modifier = Modifier.height(36.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = RainbowBlue.copy(alpha = 0.2f),
-                            contentColor = RainbowBlue
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add Avatar",
-                            tint = RainbowBlue,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Avatar",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        )
-                    }
-                }
-
-                // Stars Display
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(RainbowYellow.copy(alpha = 0.2f))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Stars",
-                        tint = RainbowYellow,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text(
-                        text = "$totalStars/$maxStars",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = RainbowOrange
+                    Box(
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.12f))
+                            .border(2.dp, borderColor, CircleShape)
+                            .clickable(onClick = onAvatarClick),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (displayImageUrl != null) {
+                            AsyncImage(
+                                model = displayImageUrl,
+                                contentDescription = "Avatar",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Text(text = fallbackEmoji, fontSize = 32.sp)
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (userName.isBlank()) "Music Explorer" else userName,
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
                         )
+                        Text(
+                            text = when {
+                                !isLoggedIn -> "Guest mode • tap avatar to sign in"
+                                    avatarName != null -> "Avatar: $avatarName"
+                                    else -> "Tap avatar to open your quick menu"
+                            },
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                        )
+                    }
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = badgeColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Star Journey",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                        )
+                    }
+                    Text(
+                        text = "$totalStars / $maxStars",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                    )
+                    LinearProgressIndicator(
+                        progress = starProgress.coerceIn(0f, 1f),
+                        modifier = Modifier
+                            .width(120.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(50)),
+                        color = badgeColor,
+                        trackColor = Color.White.copy(alpha = 0.2f)
                     )
                 }
             }
         }
     }
+}
+
+private val avatarAccentPalette = listOf(
+    RainbowRed,
+    RainbowOrange,
+    RainbowYellow,
+    RainbowGreen,
+    RainbowBlue,
+    RainbowIndigo,
+    RainbowViolet,
+    RainbowPink
+)
+
+private val namedAccentColors = mapOf(
+    "red" to RainbowRed,
+    "orange" to RainbowOrange,
+    "yellow" to RainbowYellow,
+    "green" to RainbowGreen,
+    "blue" to RainbowBlue,
+    "indigo" to RainbowIndigo,
+    "violet" to RainbowViolet,
+    "purple" to RainbowViolet,
+    "pink" to RainbowPink,
+    "magenta" to RainbowPink,
+    "teal" to RainbowGreen.mixWith(RainbowBlue, 0.5f),
+    "aqua" to RainbowGreen.mixWith(RainbowBlue, 0.6f)
+)
+
+private fun String.toColorOrNull(): Color? {
+    val raw = trim()
+    if (raw.isEmpty()) return null
+
+    namedAccentColors[raw.lowercase()]?.let { return it }
+
+    val hexCandidates = buildList {
+        add(raw)
+        if (!raw.startsWith("#")) add("#$raw")
+        if (raw.startsWith("0x", ignoreCase = true)) {
+            add("#" + raw.removePrefix("0x"))
+            add("#" + raw.removePrefix("0X"))
+        }
+    }.distinct()
+
+    for (candidate in hexCandidates) {
+        try {
+            return Color(android.graphics.Color.parseColor(candidate))
+        } catch (_: IllegalArgumentException) {
+            // try next option
+        }
+    }
+
+    return null
+}
+
+private fun String.toAccentPaletteColor(): Color {
+    if (avatarAccentPalette.isEmpty()) return RainbowIndigo
+    val index = hashCode().absoluteValue % avatarAccentPalette.size
+    return avatarAccentPalette[index]
+}
+
+private fun Color.mixWith(target: Color, fraction: Float): Color {
+    val clamped = fraction.coerceIn(0f, 1f)
+    return androidx.compose.ui.graphics.lerp(this, target, clamped)
+}
+
+private fun Avatar.accentIdColor(): Color? {
+    val source = avatarImageUrl?.takeIf { it.isNotBlank() }
+        ?: name
+        ?: id
+    return source?.toAccentPaletteColor()
+}
+
+private fun AvatarCustomization?.accentColor(): Color? {
+    this ?: return null
+    val prioritizedColors = listOfNotNull(
+        clothingColor,
+        accessories?.firstOrNull(),
+        hairColor,
+        eyeColor
+    )
+    for (value in prioritizedColors) {
+        val parsed = value.toColorOrNull()
+        if (parsed != null) return parsed
+    }
+    return null
 }
