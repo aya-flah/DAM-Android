@@ -4,6 +4,8 @@ data class Sublevel(
     val _id: String,
     val levelId: String,
     val index: Int,
+    val title: String? = null,
+    val description: String? = null,
     val difficulty: Int,
     val notes: List<String>,
     val maxStars: Int,
@@ -14,7 +16,7 @@ data class Sublevel(
     val heroUrl: String? = null,
     val trackUrl: String? = null,
 
-    // bakcend enriched response fields
+    // backend enriched response fields
     val unlocked: Boolean = false,
     val starsEarned: Int = 0,
     val completed: Boolean = false,

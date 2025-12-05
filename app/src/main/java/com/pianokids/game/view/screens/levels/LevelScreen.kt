@@ -141,7 +141,7 @@ fun LevelScreen(
             AudioPreviewPlayer.prepare(
                 context = context,
                 audioUrl = audioPreviewUrl,
-                onReady = { if (level.autoPlayPreview) AudioPreviewPlayer.play() },
+                onReady = { AudioPreviewPlayer.play() },
                 onComplete = {
                     showPreview = false
                     selectedMode = pendingMode
@@ -249,11 +249,12 @@ fun LevelScreen(
             // --------------------------------------------------
             // FALLING NOTES — spans behind UI
             // --------------------------------------------------
+            val sublevelNotes = state.selectedSublevel?.notes ?: level.expectedNotes
             val noteDurations =
-                state.noteDurations.ifEmpty { List(level.expectedNotes.size) { 1f } }
+                state.noteDurations.ifEmpty { List(sublevelNotes.size) { 1f } }
 
             FallingNotesView(
-                expectedNotes = level.expectedNotes,
+                expectedNotes = sublevelNotes,
                 currentNoteIndex = state.currentNoteIndex,
                 noteDurations = noteDurations,
                 onNoteHit = { /* purely visual */ },
@@ -868,6 +869,9 @@ fun LevelScreen(
                         if (next.unlocked) {
                             // 👉 Move to next sublevel inside same level
                             viewModel.selectSublevel(next)
+                            // Show preview only before final sublevel (when moving to sublevel 5)
+                            val isBeforeLastSublevel = next.index == all.size
+                            showPreview = isBeforeLastSublevel
                             return@LevelCompletedDialog
                         }
                     }
@@ -911,7 +915,13 @@ fun LevelScreen(
                 pendingMode = mode
                 viewModel.selectSublevel(sublevel)
                 showSublevelDialog = false
-                showPreview = true
+                // Only show preview before the last sublevel (index 5)
+                val isBeforeLastSublevel = sublevel.index == state.sublevels.size
+                showPreview = isBeforeLastSublevel
+                // If not showing preview, directly set the mode
+                if (!isBeforeLastSublevel) {
+                    selectedMode = mode
+                }
             }
         )
     }

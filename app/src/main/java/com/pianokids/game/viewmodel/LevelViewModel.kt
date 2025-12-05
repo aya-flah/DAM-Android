@@ -280,6 +280,7 @@ class LevelViewModel : ViewModel() {
 
     fun selectSublevel(sublevel: Sublevel) {
         expectedNotes = sublevel.notes
+        noteDurations = List(sublevel.notes.size) { 1f }
 
         _uiState.value = _uiState.value.copy(
             selectedSublevel = sublevel,
@@ -289,7 +290,8 @@ class LevelViewModel : ViewModel() {
             isFailed = false,
             wrongNoteCount = 0,
             score = 0,
-            wrongMessage = null
+            wrongMessage = null,
+            noteDurations = noteDurations
         )
     }
 
@@ -348,13 +350,8 @@ class LevelViewModel : ViewModel() {
     }
 
     private fun adjustLevelIfNeeded(level: Level): Level {
-        return if (level.theme.equals("Batman", ignoreCase = true)) {
-            level.copy(
-                expectedNotes = listOf("la", "sol", "fa", "re", "re", "re", "do")
-            )
-        } else {
-            level
-        }
+        // No longer needed - sublevels handle their own notes
+        return level
     }
 
     private fun buildDurationsFor(level: Level): List<Float> {

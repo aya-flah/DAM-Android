@@ -104,6 +104,46 @@ fun SublevelSelectionDialog(
                 )
 
                 //---------------------------------------------------------
+                // SELECTED SUBLEVEL INFO
+                //---------------------------------------------------------
+                selectedSublevel?.let { sublevel ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFF0F8FF)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = sublevel.title ?: "Sublevel ${sublevel.index}",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2C3E50)
+                            )
+                            if (!sublevel.description.isNullOrEmpty()) {
+                                Text(
+                                    text = sublevel.description,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF546E7A)
+                                )
+                            }
+                            Text(
+                                text = "Notes: ${sublevel.notes.joinToString(" – ")}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF667EEA)
+                            )
+                        }
+                    }
+                }
+
+                //---------------------------------------------------------
                 // SUBLEVEL SELECTOR (NEW LOGIC)
                 //---------------------------------------------------------
                 LazyRow(
