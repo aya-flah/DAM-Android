@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,11 +57,11 @@ fun AnimatedOceanWithIslands() {
     Box(Modifier.fillMaxSize()) {
         // Single big island on the right
         Image(
-            painter = painterResource(R.drawable.floating_land),
+            painter = painterResource(R.drawable.floating_island),
             contentDescription = null,
             modifier = Modifier
-                .offset(x = 0.dp, y = (120 + islandFloat).dp)
-                .size(640.dp)
+                .offset(x = 0.dp, y = (50 + islandFloat).dp)
+                .requiredSize(1080.dp)
                 .alpha(0.85f),
             contentScale = ContentScale.Fit
         )

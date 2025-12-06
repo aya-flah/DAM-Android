@@ -25,7 +25,6 @@ data class LevelUiState(
     val wrongMessage: String? = null,
     val sublevels: List<Sublevel> = emptyList(),
     val selectedSublevel: Sublevel? = null,
-    val score: Int = 0,
     val feedbackMessage: String? = null,
     val isFeedbackPositive: Boolean = true,
     val noteDurations: List<Float> = emptyList(),
@@ -46,14 +45,13 @@ class LevelViewModel : ViewModel() {
     private var lastCorrectTimeMs: Long = 0
 
     /**
-     * Load unlocked levels for a user
+     * Load unlocked levels for a user (original behaviour for now)
      */
     fun loadUnlockedLevels(userId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
             val unlockedResponse = repository.getUnlockedLevels(userId)
-
             val unlockedMap = unlockedResponse?.levels?.associate {
                 it.levelId to it.unlocked
             } ?: emptyMap()
@@ -87,7 +85,6 @@ class LevelViewModel : ViewModel() {
                     isLevelCompleted = false,
                     isFailed = false,
                     wrongNoteCount = 0,
-                    score = 0,
                     wrongMessage = null,
                     feedbackMessage = null,
                     isFeedbackPositive = true,
@@ -108,12 +105,11 @@ class LevelViewModel : ViewModel() {
         val state = _uiState.value
         val index = state.currentNoteIndex
 
-        // Guard clauses
         if (state.isLevelCompleted || state.isFailed) return
         if (expectedNotes.isEmpty()) return
         if (index >= expectedNotes.size) return
 
-        // Normalize function to remove accents and standardize
+        // Normalize notes
         fun normalize(s: String): String {
             var normalized = s.lowercase()
                 .replace("é", "e")
@@ -122,81 +118,59 @@ class LevelViewModel : ViewModel() {
                 .replace("à", "a")
                 .replace("ù", "u")
                 .replace("ô", "o")
-                .replace("♭", "b")  // Flatten symbol
-                .replace("♯", "#")  // Sharp symbol
+                .replace("♭", "b")
+                .replace("♯", "#")
                 .trim()
 
-            // Handle enharmonic equivalents (same note, different names)
-            // C# = Db (Do# = Ré♭), D# = Eb (Ré# = Mi♭), etc.
             val enharmonicMap = mapOf(
-                // Sharp to flat conversions
-                "do#" to "reb",    // C# = Db (Ré♭)
-                "re#" to "mib",    // D# = Eb (Mi♭)
-                "fa#" to "solb",   // F# = Gb (Sol♭)
-                "sol#" to "lab",   // G# = Ab (La♭)
-                "la#" to "sib",    // A# = Bb (Si♭)
-                // Flat names stay the same
-                "reb" to "reb",
-                "mib" to "mib",
-                "solb" to "solb",
-                "lab" to "lab",
-                "sib" to "sib",
-                // Also handle "dob" = "si", "mib" = "re#", etc.
+                "do#" to "reb",
+                "re#" to "mib",
+                "fa#" to "solb",
+                "sol#" to "lab",
+                "la#" to "sib",
                 "dob" to "si",
                 "fab" to "mi",
                 "solb" to "fa#",
-                "lab" to "sol#",
-                "sib" to "la#"
+                "lab" to "sol#"
             )
 
-            // Convert enharmonic equivalents
             return enharmonicMap[normalized] ?: normalized
         }
 
         val expected = normalize(expectedNotes[index])
         val played = normalize(note)
-        
-        // Debug logging
-        Log.d("LevelViewModel", "RAW Note played: '$note' | RAW Expected: '${expectedNotes[index]}'")
-        Log.d("LevelViewModel", "NORMALIZED played: '$played' | NORMALIZED expected: '$expected' | Match: ${played == expected}")
+
+        Log.d("LevelViewModel", "Played='$played' Expected='$expected'")
 
         // ---------------------------
         // CORRECT NOTE
         // ---------------------------
         if (played == expected) {
-            // Reset wrong streak on correct
             wrongStreak = 0
             lastCorrectTimeMs = System.currentTimeMillis()
             val newIndex = index + 1
             val progress = newIndex.toFloat() / expectedNotes.size.toFloat()
 
-            // ⭐ Correct → Increase score
-            val newScore = (state.score + 25).coerceAtMost(100)
-
             if (newIndex == expectedNotes.size) {
-                // Level completed
+                // Completed!
                 _uiState.value = state.copy(
                     currentNoteIndex = newIndex,
                     progressPercentage = 1f,
-                    score = newScore,
-                    wrongNoteCount = 0,
+                    wrongNoteCount = state.wrongNoteCount,
                     showWrongAnimation = false,
                     wrongMessage = null,
-                    feedbackMessage = "Mission complete! Gotham is safe! 🎉",
+                    feedbackMessage = "Mission complete! 🎉",
                     isFeedbackPositive = true,
                     isAwaitingCorrect = false,
                     isLevelCompleted = true
                 )
             } else {
-                // Normal progress
                 _uiState.value = state.copy(
                     currentNoteIndex = newIndex,
                     progressPercentage = progress,
-                    score = newScore,
-                    wrongNoteCount = 0,
                     showWrongAnimation = false,
                     wrongMessage = null,
-                    feedbackMessage = "Great ear! ${expected.uppercase()} sounded perfect!",
+                    feedbackMessage = "Great job!",
                     isFeedbackPositive = true,
                     isAwaitingCorrect = false
                 )
@@ -207,26 +181,23 @@ class LevelViewModel : ViewModel() {
         // ---------------------------
         // WRONG NOTE
         // ---------------------------
-        // Filter: ignore brief wrongs immediately after a correct (300ms grace)
         val now = System.currentTimeMillis()
+
         if (now - lastCorrectTimeMs < 300) {
-            Log.d("LevelViewModel", "Grace period: ignoring wrong within 300ms after correct")
             _uiState.value = state.copy(
-                feedbackMessage = "Almost! Hit ${expected.uppercase()} next!",
+                feedbackMessage = "Almost!",
                 isFeedbackPositive = false,
                 isAwaitingCorrect = true
             )
             return
         }
 
-        // Require two consecutive wrongs before counting
         wrongStreak = if (played == lastPlayedNormalized) wrongStreak + 1 else 1
         lastPlayedNormalized = played
 
         if (wrongStreak < 2) {
-            Log.d("LevelViewModel", "Wrong streak ${wrongStreak}/2: not counting yet")
             _uiState.value = state.copy(
-                feedbackMessage = "Almost! Hit ${expected.uppercase()} next!",
+                feedbackMessage = "Almost!",
                 isFeedbackPositive = false,
                 isAwaitingCorrect = true
             )
@@ -234,16 +205,13 @@ class LevelViewModel : ViewModel() {
         }
 
         val newWrongCount = state.wrongNoteCount + 1
-        val newScore = (state.score - 5).coerceAtLeast(0)
 
         if (newWrongCount >= 3) {
             _uiState.value = state.copy(
                 isFailed = true,
                 wrongNoteCount = 3,
                 showWrongAnimation = false,
-                wrongMessage = null,
-                score = newScore,
-                feedbackMessage = "We'll try again! ${expected.uppercase()} was the note.",
+                feedbackMessage = "We'll try again!",
                 isFeedbackPositive = false,
                 isAwaitingCorrect = true
             )
@@ -253,23 +221,18 @@ class LevelViewModel : ViewModel() {
         _uiState.value = state.copy(
             showWrongAnimation = true,
             wrongNoteCount = newWrongCount,
-            score = newScore,
-            wrongMessage = "Wrong note! Try again!",
-            feedbackMessage = "Oops! We needed ${expected.uppercase()}!",
+            feedbackMessage = "Oops!",
             isFeedbackPositive = false,
             isAwaitingCorrect = true
         )
     }
 
-    // load sublevels
+    // Load sublevels
     fun loadSublevels(userId: String, levelId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
-            val response: List<Sublevel>? =
-                sublevelProgressRepo.getUserSublevels(userId, levelId)
-
-            Log.e("DEBUG_SUBLEVELS", "📥 API returned ${response?.size ?: 0} sublevels")
+            val response = sublevelProgressRepo.getUserSublevels(userId, levelId)
 
             _uiState.value = _uiState.value.copy(
                 sublevels = response ?: emptyList(),
@@ -289,58 +252,47 @@ class LevelViewModel : ViewModel() {
             isLevelCompleted = false,
             isFailed = false,
             wrongNoteCount = 0,
-            score = 0,
             wrongMessage = null,
             noteDurations = noteDurations
         )
     }
 
-    /**
-     * Save progress
-     */
     private val sublevelProgressRepo = SublevelProgressRepository()
 
+    /**
+     * ⭐⭐⭐ MISTAKE-BASED STAR SYSTEM ⭐⭐⭐
+     */
     fun saveProgress(userId: String) {
         val state = _uiState.value
         val level = state.currentLevel ?: return
         val sublevel = state.selectedSublevel ?: return
 
+        val wrongs = state.wrongNoteCount
+
+        val stars = when (wrongs) {
+            0 -> 3
+            1 -> 2
+            2 -> 1
+            else -> 0
+        }
+
         viewModelScope.launch {
-            val score = state.score
-
-            val stars = when {
-                score >= 70 -> 3
-                score >= 60 -> 2
-                score >= 30 -> 1
-                else -> 0
-            }
-
             val request = SublevelProgressRequest(
                 userId = userId,
                 levelId = level._id,
                 sublevelId = sublevel._id,
                 stars = stars,
-                score = score,
+                score = 0,
                 completed = true
             )
 
-            // THIS RETURNS List<Sublevel>
             val updatedSubs = sublevelProgressRepo.submitProgress(request)
 
             if (updatedSubs != null) {
-
-                // update all sublevels
                 _uiState.value = _uiState.value.copy(
-                    sublevels = updatedSubs
+                    sublevels = updatedSubs,
+                    selectedSublevel = updatedSubs.firstOrNull { it._id == sublevel._id }
                 )
-
-                // update selected one
-                val refreshed = updatedSubs.firstOrNull { it._id == sublevel._id }
-                if (refreshed != null) {
-                    _uiState.value = _uiState.value.copy(
-                        selectedSublevel = refreshed
-                    )
-                }
             }
         }
     }
@@ -349,22 +301,11 @@ class LevelViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(showWrongAnimation = false)
     }
 
-    private fun adjustLevelIfNeeded(level: Level): Level {
-        // No longer needed - sublevels handle their own notes
-        return level
-    }
+    private fun adjustLevelIfNeeded(level: Level): Level = level
 
     private fun buildDurationsFor(level: Level): List<Float> {
         return if (level.theme.equals("Batman", ignoreCase = true)) {
-            listOf(
-                1.5f,  // La (1½ beats)
-                0.5f,  // Sol (½ beat)
-                0.5f,  // Fa (½ beat)
-                0.5f,  // Re (½ beat)
-                0.5f,  // Re (½ beat)
-                0.5f,  // Re (½ beat)
-                1.5f   // Do (1½ beats)
-            )
+            listOf(1.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 1.5f)
         } else {
             List(level.expectedNotes.size) { 1f }
         }

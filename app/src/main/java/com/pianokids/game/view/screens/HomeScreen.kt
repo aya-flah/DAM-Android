@@ -2,6 +2,7 @@ package com.pianokids.game.view.screens
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -39,6 +41,9 @@ import androidx.compose.ui.unit.fontscaling.MathUtils.lerp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.request.ImageRequest
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.pianokids.game.R
 import com.pianokids.game.data.models.Level
@@ -52,6 +57,7 @@ import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.data.repository.SublevelProgressRepository
 import com.pianokids.game.data.repository.SublevelRepository
 import com.pianokids.game.ui.theme.*
+import com.pianokids.game.utils.ImageMapper
 import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.UserPreferences
@@ -858,19 +864,17 @@ fun MapIsland(
     floatOffset: Float,
     onClick: () -> Unit
 ) {
-    // SOLUTION 1: Specific positions for nice winding path
+    // 🔥 KEEPING YOUR ORIGINAL POSITIONING (unchanged)
     val pos = when (level.order) {
-        1 -> Offset(0.15f, 0.65f)   // Bottom left - First island
-        2 -> Offset(0.35f, 0.45f)   // Middle left - slightly up
-        3 -> Offset(0.55f, 0.25f)   // Upper middle - going up
-        4 -> Offset(0.75f, 0.35f)   // Upper right - slight down
-        5 -> Offset(0.95f, 0.55f)   // Right side - going down
-        6 -> Offset(1.15f, 0.40f)   // Far right - middle height
-        7 -> Offset(1.35f, 0.60f)   // Further right - lower
-        8 -> Offset(1.55f, 0.30f)   // Even further - up again
+        1 -> Offset(0.15f, 0.65f)
+        2 -> Offset(0.35f, 0.45f)
+        3 -> Offset(0.55f, 0.25f)
+        4 -> Offset(0.75f, 0.35f)
+        5 -> Offset(0.95f, 0.55f)
+        6 -> Offset(1.15f, 0.40f)
+        7 -> Offset(1.35f, 0.60f)
+        8 -> Offset(1.55f, 0.30f)
         else -> {
-            // Fallback for any additional levels
-            // Creates a diagonal pattern
             val row = (level.order - 1) / 4
             val col = (level.order - 1) % 4
             Offset(
@@ -894,74 +898,42 @@ fun MapIsland(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
-            // -------- LEVEL CARD --------
-            Card(
-                modifier = Modifier
-                    .width(150.dp)
-                    .height(130.dp)
-                    .clickable(onClick = onClick),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isUnlocked) Color.White else Color(0xFFE0E0E0)
-                ),
-                elevation = CardDefaults.cardElevation(6.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-
-                    if (!isUnlocked) {
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color.Gray)
-                    } else {
-                        Text("🎵", fontSize = 26.sp)
-                    }
-
-                    Spacer(Modifier.height(4.dp))
-
-                    // Level title
-                    Text(
-                        text = level.title,
-                        textAlign = TextAlign.Center,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 2
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    if (!isUnlocked) {
-                        Text("Locked", fontSize = 9.sp, color = Color.Gray)
-                    }
-                }
-            }
+            // ----------------------------------------------------
+            // 🎨 NEW CUTE LEVEL CARD UI
+            // ----------------------------------------------------
+            CuteLevelCard(
+                level = level,
+                isUnlocked = isUnlocked,
+                stars = stars,
+                onClick = onClick
+            )
 
             Spacer(Modifier.height(6.dp))
 
-            // -------- ISLAND IMAGE FROM BACKEND --------
+            // ----------------------------------------------------
+            // 🏝️ ISLAND IMAGE (unchanged)
+            // ----------------------------------------------------
             if (!level.islandImageUrl.isNullOrEmpty()) {
-                AsyncImage(
-                    model = level.islandImageUrl,
-                    contentDescription = "Island ${level.title}",
+                Image(
+                    painter = painterResource(
+                        id = ImageMapper.islandImage(level.theme)
+                    ),
+                    contentDescription = "Island",
                     modifier = Modifier.size(280.dp),
-                    contentScale = ContentScale.Fit,
-                    alpha = if (isUnlocked) 1f else 0.5f
+                    contentScale = ContentScale.Crop
                 )
             } else {
-                // Fallback placeholder when no island image
                 Box(
                     modifier = Modifier
                         .size(280.dp)
                         .background(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
+                            Brush.radialGradient(
+                                listOf(
                                     Color(0xFF4CAF50).copy(alpha = if (isUnlocked) 0.8f else 0.4f),
                                     Color(0xFF2E7D32).copy(alpha = if (isUnlocked) 0.6f else 0.3f)
                                 )
                             ),
-                            shape = CircleShape
+                            CircleShape
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -975,6 +947,87 @@ fun MapIsland(
         }
     }
 }
+
+
+// new level card
+
+@Composable
+fun CuteLevelCard(
+    level: Level,
+    isUnlocked: Boolean,
+    stars: Int,
+    onClick: () -> Unit
+) {
+    // 🎨 Color palettes per level (fun, bright, kid-friendly)
+    val colors = when (level.order) {
+        1 -> listOf(Color(0xFFFFCDD2), Color(0xFFE57373))
+        2 -> listOf(Color(0xFFFFE0B2), Color(0xFFFFB74D))
+        3 -> listOf(Color(0xFFFFF9C4), Color(0xFFFFF176))
+        4 -> listOf(Color(0xFFC8E6C9), Color(0xFF81C784))
+        5 -> listOf(Color(0xFFBBDEFB), Color(0xFF64B5F6))
+        6 -> listOf(Color(0xFFE1BEE7), Color(0xFFBA68C8))
+        else -> listOf(Color(0xFFE0E0E0), Color(0xFF9E9E9E))
+    }
+
+    Box(
+        modifier = Modifier
+            .width(160.dp)
+            .height(140.dp)
+            .shadow(18.dp, RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(26.dp))
+            .background(Brush.verticalGradient(colors))
+            .border(
+                width = 4.dp,
+                color = Color.White.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(26.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+
+            // 🎵 Emoji (from ImageMapper)
+            Text(
+                text = ImageMapper.levelEmoji(level.theme),
+                fontSize = 32.sp
+            )
+
+            // 📛 Level title
+            Text(
+                text = level.title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                color = Color.White
+            )
+
+        }
+
+        // 🔒 Locked overlay
+        if (!isUnlocked) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .clip(RoundedCornerShape(26.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(34.dp)
+                )
+            }
+        }
+    }
+}
+
 
 // -------------------------------------------------------------
 // BACKGROUND
@@ -999,11 +1052,18 @@ fun OceanMapBackground(
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Background image (sea.png)
-        Image(
-            painter = painterResource(id = R.drawable.sea),
-            contentDescription = "Ocean Background",
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(R.drawable.ocean)
+                .decoderFactory(if (Build.VERSION.SDK_INT >= 28) {
+                    ImageDecoderDecoder.Factory()
+                } else {
+                    GifDecoder.Factory()
+                })
+                .build(),
+            contentDescription = "Animated Ocean",
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.FillBounds
+            contentScale = ContentScale.Crop
         )
 
         // Canvas for waves, clouds, and birds
@@ -1095,10 +1155,40 @@ fun OceanMapBackground(
 fun ComingSoonDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Level Locked", fontWeight = FontWeight.Bold) },
-        text = { Text("Complete previous levels to unlock this one!") },
+        containerColor = Color(0xFF222741),
+        shape = RoundedCornerShape(28.dp),
+        title = {
+            Text(
+                "🔒 Level Locked!",
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White,
+                fontSize = 22.sp,
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Complete previous levels to unlock this one!",
+                    color = Color(0xFFE0E0E0),
+                    textAlign = TextAlign.Center,
+                    fontSize = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+        },
         confirmButton = {
-            Button(onClick = onDismiss) { Text("OK") }
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF667EEA)
+                ),
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth(0.6f)
+            ) {
+                Text("OK", color = Color.White, fontWeight = FontWeight.Bold)
+            }
         }
     )
 }

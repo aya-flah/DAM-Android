@@ -7,12 +7,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -25,8 +25,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import com.pianokids.game.R
-import com.pianokids.game.ui.theme.PianoKidsGameTheme
 import com.pianokids.game.utils.SoundManager
 
 @Composable
@@ -40,12 +38,17 @@ fun LevelIntroDialog(
     var isVisible by remember { mutableStateOf(false) }
     var skipRequested by remember { mutableStateOf(false) }
 
-    // Entrance animation trigger
-    LaunchedEffect(Unit) {
-        isVisible = true
-    }
+    val outerShape = RoundedCornerShape(28.dp)
+    val innerShape = RoundedCornerShape(24.dp)
 
-    // TYPEWRITER EFFECT
+    // =============================
+    //       ENTRANCE ANIMATION
+    // =============================
+    LaunchedEffect(Unit) { isVisible = true }
+
+    // =============================
+    //          TYPEWRITER
+    // =============================
     LaunchedEffect(storyText, skipRequested) {
         if (skipRequested) {
             typedText = storyText
@@ -53,283 +56,224 @@ fun LevelIntroDialog(
             return@LaunchedEffect
         }
 
-        delay(300)
+        delay(250)
         typedText = ""
         showChooseButton = false
 
         for (char in storyText) {
             typedText += char
             SoundManager.playTyping()
-            delay(35)
+            delay(30)
         }
         showChooseButton = true
     }
 
-    // Pulsing glow animation
-    val infiniteTransition = rememberInfiniteTransition()
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.6f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
-
-    // BACKDROP WITH GRADIENT
-    AnimatedVisibility(
-        visible = isVisible,
-        enter = fadeIn(animationSpec = tween(500))
+    // =============================
+    //     BACKGROUND OVERLAY
+    // =============================
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.75f)),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
+
+        // =============================
+        //     GLASSY INTRO CARD
+        // =============================
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF1A237E).copy(alpha = 0.6f),
-                            Color(0xFF283593).copy(alpha = 0.7f),
-                            Color(0xFF1A1A2E).copy(alpha = 0.8f)
-                        )
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight()
+                .padding(vertical = 16.dp),
+            shape = outerShape,
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Transparent
+            ),
+            border = BorderStroke(
+                width = 3.dp,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF667EEA),  // purple–blue
+                        Color(0xFF00D9FF),  // aqua
+                        Color(0xFFFFC857)   // gold
                     )
-                ),
-            contentAlignment = Alignment.Center
+                )
+            )
         ) {
 
-            // Animated background particles
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF667EEA).copy(alpha = glowAlpha * 0.15f),
-                                Color.Transparent,
-                                Color(0xFF00D9FF).copy(alpha = glowAlpha * 0.15f)
+                    .fillMaxWidth()
+                    .clip(innerShape)
+            ) {
+
+                // =============================
+                //     Frosted Glass Layer
+                // =============================
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.18f),
+                                    Color.White.copy(alpha = 0.10f)
+                                )
                             )
                         )
-                    )
-            )
-
-            // MAIN CARD
-            AnimatedVisibility(
-                visible = isVisible,
-                enter = scaleIn(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                ) + fadeIn()
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.90f)
-                        .wrapContentHeight()
+                        .blur(22.dp)
                         .border(
-                            width = 2.dp,
-                            brush = Brush.linearGradient(
-                                colors = listOf(
-                                    Color(0xFF667EEA).copy(alpha = glowAlpha),
-                                    Color(0xFF00D9FF).copy(alpha = glowAlpha),
-                                    Color(0xFF64B5F6).copy(alpha = glowAlpha)
-                                )
-                            ),
-                            shape = RoundedCornerShape(32.dp)
+                            1.dp,
+                            Color.White.copy(alpha = 0.25f),
+                            innerShape
                         )
-                        .clip(RoundedCornerShape(32.dp)),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFFAFAFA)
-                    ),
-                    elevation = CardDefaults.cardElevation(0.dp)
+                )
+
+                // =============================
+                //     CONTENT (UNCHANGED)
+                // =============================
+                Column(
+                    modifier = Modifier
+                        .padding(26.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
 
-                    Column(
-                        modifier = Modifier
-                            .padding(28.dp)
-                            .fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                    // -----------------------------------
+                    // HEADER
+                    // -----------------------------------
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-
-                        // HEADER WITH SKIP BUTTON
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Title
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Start
-                            ) {
-                                Text(
-                                    text = "🎯",
-                                    fontSize = 24.sp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "MISSION BRIEFING",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF2C3E50),
-                                    letterSpacing = 2.sp
-                                )
-                            }
-
-                            // Skip button
-                            TextButton(
-                                onClick = { skipRequested = true },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = Color(0xFF667EEA)
-                                )
-                            ) {
-                                Text(
-                                    text = "Skip ⏭",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-
-                        Divider(
-                            color = Color(0xFF667EEA).copy(alpha = 0.2f),
-                            thickness = 2.dp
+                        Text(
+                            text = "🎯 Mission Briefing",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
                         )
 
-                        // CONTENT AREA
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(24.dp),
-                            verticalAlignment = Alignment.Top
-                        ) {
-
-                            // HERO IMAGE WITH ENHANCED GLOW
-                            Box(
-                                modifier = Modifier
-                                    .width(220.dp)
-                                    .height(300.dp)
-                            ) {
-                                // Multi-layer glow effect
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .offset(y = 8.dp)
-                                        .background(
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(
-                                                    Color(0xFF667EEA).copy(alpha = glowAlpha * 0.6f),
-                                                    Color(0xFF00D9FF).copy(alpha = glowAlpha * 0.4f),
-                                                    Color.Transparent
-                                                )
-                                            ),
-                                            shape = RoundedCornerShape(24.dp)
-                                        )
-                                )
-
-                                // Main image
-                                Image(
-                                    painter = painterResource(id = heroImageRes),
-                                    contentDescription = "Hero",
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .border(
-                                            width = 4.dp,
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(
-                                                    Color(0xFF667EEA),
-                                                    Color(0xFF00D9FF)
-                                                )
-                                            ),
-                                            shape = RoundedCornerShape(24.dp)
-                                        )
-                                        .clip(RoundedCornerShape(24.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-
-                            // STORY TEXT SECTION
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(300.dp)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFFF8F9FA),
-                                                Color(0xFFE8EAF6).copy(alpha = 0.5f)
-                                            )
-                                        ),
-                                        RoundedCornerShape(20.dp)
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = Color(0xFF667EEA).copy(alpha = 0.2f),
-                                        shape = RoundedCornerShape(20.dp)
-                                    )
-                                    .padding(20.dp)
-                            ) {
-                                Text(
-                                    text = typedText,
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF2C3E50),
-                                    lineHeight = 24.sp,
-                                    textAlign = TextAlign.Start
-                                )
-                            }
-                        }
-
-                        // START BUTTON
-                        AnimatedVisibility(visible = showChooseButton) {
-                            Button(
-                                onClick = onFinished,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(64.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
-                            ) {
-                                Text(
-                                    "CHOOSE SUBLEVEL",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-
-                        // BOTTOM HINT
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.horizontalGradient(
-                                        colors = listOf(
-                                            Color(0xFFFFF9C4).copy(alpha = 0.8f),
-                                            Color(0xFFFFE082).copy(alpha = 0.8f)
-                                        )
-                                    ),
-                                    RoundedCornerShape(12.dp)
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = Color(0xFFFFD54F).copy(alpha = 0.5f),
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("💡", fontSize = 18.sp)
-                            Spacer(modifier = Modifier.width(10.dp))
+                        TextButton(onClick = { skipRequested = true }) {
                             Text(
-                                text = "Listen carefully and play the correct notes to win!",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFF57C00),
-                                textAlign = TextAlign.Center
+                                text = "Skip ⏭",
+                                color = Color(0xFF00D9FF),
+                                fontWeight = FontWeight.Bold
                             )
                         }
+                    }
+
+                    Divider(
+                        color = Color.White.copy(alpha = 0.15f),
+                        thickness = 1.dp
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                    ) {
+
+                        // -----------------------------------
+                        // HERO IMAGE
+                        // -----------------------------------
+                        Image(
+                            painter = painterResource(heroImageRes),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .width(200.dp)
+                                .height(260.dp)
+                                .clip(RoundedCornerShape(22.dp))
+                                .border(
+                                    3.dp,
+                                    Brush.linearGradient(
+                                        listOf(
+                                            Color(0xFF667EEA),
+                                            Color(0xFF00D9FF),
+                                            Color(0xFFFFC857)
+                                        )
+                                    ),
+                                    RoundedCornerShape(22.dp)
+                                ),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        // -----------------------------------
+                        // STORY TEXT (Glass Panel)
+                        // -----------------------------------
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(260.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(
+                                    Color.Black.copy(alpha = 0.25f)
+                                )
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.25f),
+                                    RoundedCornerShape(18.dp)
+                                )
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = typedText,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                                lineHeight = 22.sp
+                            )
+                        }
+                    }
+
+                    // -----------------------------------
+                    // START BUTTON
+                    // -----------------------------------
+                    AnimatedVisibility(showChooseButton) {
+                        Button(
+                            onClick = onFinished,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(58.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF6CCF7A)
+                            )
+                        ) {
+                            Text(
+                                "Listen To Preview",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    // -----------------------------------
+                    // TIP BOX
+                    // -----------------------------------
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.12f))
+                            .border(
+                                1.dp,
+                                Color.White.copy(alpha = 0.2f),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("💡", fontSize = 18.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = "Listen carefully and play the correct notes!",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
                     }
                 }
             }

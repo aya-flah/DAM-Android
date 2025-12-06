@@ -53,4 +53,25 @@ class LevelRepository {
             }
     }
 
+
+    suspend fun getUserTotalStars(userId: String): Int =
+        withContext(Dispatchers.IO) {
+            try {
+                val response = RetrofitClient.levelApi.getUserTotalStars(userId)
+
+                if (response.isSuccessful) {
+                    // Expected JSON = { "totalStars": number }
+                    response.body()?.totalStars ?: 0
+                } else {
+                    0
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                0
+            }
+        }
+
+
+
+
 }

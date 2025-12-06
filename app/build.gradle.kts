@@ -123,4 +123,9 @@ dependencies {
     implementation("com.google.ai.client.generativeai:generativeai:0.1.2")
     // Chromium WebView (Modern, works better than system WebView)
     implementation("com.google.android.gms:play-services-cronet:18.0.1")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-gif:2.6.0")
+    implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation("androidx.media3:media3-ui:1.3.1")
+
 }

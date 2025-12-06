@@ -109,7 +109,7 @@ fun ProfileScreen(
             avatarViewModel.loadUserAvatars()
         }
     }
-    
+
     // Listen for AI generation success and show preview
     LaunchedEffect(aiGenerationResponse) {
         aiGenerationResponse?.let { response ->
@@ -117,7 +117,7 @@ fun ProfileScreen(
             android.util.Log.d("ProfileScreen", "Avatar Name: ${response.name}")
             android.util.Log.d("ProfileScreen", "Description: ${response.aiGeneratedDescription}")
             android.util.Log.d("ProfileScreen", "Image URL: ${response.avatarImageUrl}")
-            
+
             pendingAIAvatar = response
             showAIPreviewDialog = true
             android.util.Log.d("ProfileScreen", "✅ Preview dialog should show now: $showAIPreviewDialog")
@@ -129,7 +129,7 @@ fun ProfileScreen(
     LaunchedEffect(avatarError) {
         avatarError?.let { error ->
             // Check if this is an AI generation error
-            if (error.contains("generate", ignoreCase = true) || 
+            if (error.contains("generate", ignoreCase = true) ||
                 error.contains("appropriate", ignoreCase = true) ||
                 error.contains("Bad Request", ignoreCase = true)) {
                 // Show kid-friendly error dialog
@@ -407,13 +407,13 @@ fun ProfileScreen(
                     pendingAIAvatarName = name
                     pendingPrompt = prompt
                     pendingStyle = style
-                    
+
                     // Generate avatar - will trigger preview or error
                     avatarViewModel.generateAvatarFromPrompt(prompt, name, style)
                 }
             )
         }
-        
+
         // AI Avatar Preview Dialog
         if (showAIPreviewDialog && pendingAIAvatar != null) {
             AIAvatarPreviewDialog(
@@ -423,11 +423,11 @@ fun ProfileScreen(
                     // Save avatar to database (was only preview before)
                     pendingAIAvatar?.previewData?.let { previewData ->
                         avatarViewModel.saveAIAvatar(previewData)
-                        
+
                         showAIPreviewDialog = false
                         pendingAIAvatar = null
                         snackbarHostState.currentSnackbarData?.dismiss()
-                        
+
                         coroutineScope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "✨ Avatar saved! Welcome, ${pendingAIAvatarName}!",
@@ -440,14 +440,14 @@ fun ProfileScreen(
                     // Regenerate with same prompt (don't save current preview)
                     showAIPreviewDialog = false
                     pendingAIAvatar = null
-                    
+
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar(
                             message = "🔄 Creating a new version...",
                             duration = SnackbarDuration.Indefinite
                         )
                     }
-                    
+
                     avatarViewModel.generateAvatarFromPrompt(pendingPrompt, pendingAIAvatarName, pendingStyle)
                 },
                 onDismiss = {
@@ -455,7 +455,7 @@ fun ProfileScreen(
                     showAIPreviewDialog = false
                     pendingAIAvatar = null
                     snackbarHostState.currentSnackbarData?.dismiss()
-                    
+
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar(
                             message = "❌ Avatar not saved",
@@ -466,13 +466,13 @@ fun ProfileScreen(
                 isSaving = false
             )
         }
-        
+
         // AI Generation Loading Dialog
         if (isGeneratingAI) {
             AlertDialog(
                 onDismissRequest = { /* Can't dismiss while generating */ },
-                title = { 
-                    Text("🎨 Creating Your AI Avatar", style = MaterialTheme.typography.headlineSmall) 
+                title = {
+                    Text("🎨 Creating Your AI Avatar", style = MaterialTheme.typography.headlineSmall)
                 },
                 text = {
                     Column(
@@ -519,7 +519,7 @@ fun ProfileScreen(
                 confirmButton = { /* No button while loading */ }
             )
         }
-        
+
         // Kid-Friendly Error Dialog
         if (showAIErrorDialog) {
             KidFriendlyErrorDialog(
@@ -849,7 +849,7 @@ fun PlayfulProfileAvatar(
             }
         }
 
-   
+
     }
 }
 
@@ -919,7 +919,7 @@ fun KidsNameSection(
                     }
                 }
 
-                 if (userProvider != null) {
+                if (userProvider != null) {
                     FunProviderBadge(provider = userProvider)
                 }
             }
@@ -1188,9 +1188,9 @@ fun KidsAchievementsSection(totalStars: Int, userLevel: Int) {
                     AnimatedAchievementStar(earned = earned, index = index)
                 }
             }
-            
+
             Spacer(Modifier.height(8.dp))
-            
+
             // Progress text
             Text(
                 text = "$totalStars / 25 stars earned",
@@ -1232,7 +1232,7 @@ fun RowScope.AnimatedAchievementStar(earned: Boolean, index: Int) {
         ),
         label = "scale$index"
     )
-    
+
     val rotation by infiniteTransition.animateFloat(
         0f, if (earned) 360f else 0f,
         infiniteRepeatable(
@@ -1622,88 +1622,155 @@ fun KidsLogoutDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .shadow(8.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(Color(0xFFFF4081)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("👋", fontSize = 48.sp)
-            }
-        },
-        title = {
-            Text(
-                "See You Soon! 🌟",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 28.sp,
-                    color = Color(0xFF667EEA)
-                ),
-                textAlign = TextAlign.Center
-            )
-        },
-        text = {
-            Text(
-                "Are you sure you want to leave?",
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontSize = 18.sp,
-                    color = Color.Gray
-                ),
-                textAlign = TextAlign.Center
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    SoundManager.playClick()
-                    onConfirm()
-                },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFF4081)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(4.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(vertical = 8.dp)
+    // 🟣 Entrance animation
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(250)) + scaleIn(initialScale = 0.85f),
+        exit = fadeOut(tween(200)) + scaleOut(targetScale = 0.85f)
+    ) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(30.dp))
+                .border(
+                    width = 2.dp,
+                    brush = Brush.linearGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.55f),
+                            Color(0xFFB2C3FF).copy(alpha = 0.45f),
+                            Color(0xFFFFAFCC).copy(alpha = 0.45f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(30.dp)
+                )
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.25f),
+                            Color.White.copy(alpha = 0.15f)
+                        )
+                    )
+                )
+                .shadow(20.dp, RoundedCornerShape(30.dp)),
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(90.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFFFF4081).copy(alpha = 0.8f),
+                                    Color(0xFFFF80AB).copy(alpha = 0.6f)
+                                )
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text("👋", fontSize = 20.sp)
+                    Text("👋", fontSize = 50.sp)
+                }
+            },
+            title = {
+                Text(
+                    "See You Soon! 🌟",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 26.sp,
+                        color = Color(0xFF667EEA)
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    "Are you sure you want to leave?",
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF444444)
+                    ),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+
+            // 🩵 Confirm (Logout) Button — Glassy
+            confirmButton = {
+                Button(
+                    onClick = {
+                        SoundManager.playClick()
+                        onConfirm()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(
+                            2.dp,
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFFFF80AB),
+                                    Color(0xFFFF4081)
+                                )
+                            ),
+                            RoundedCornerShape(18.dp)
+                        ),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.25f)
+                    )
+                ) {
                     Text(
                         "Yes, Logout",
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFF4081),
                         fontSize = 18.sp
                     )
                 }
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = {
-                    SoundManager.playClick()
-                    onDismiss()
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    "Stay Here!",
-                    color = Color(0xFF667EEA),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-        },
-        containerColor = Color.White,
-        shape = RoundedCornerShape(28.dp)
-    )
+            },
+
+            // 💙 Cancel Button — Soft Blue Glass
+            dismissButton = {
+                Button(
+                    onClick = {
+                        SoundManager.playClick()
+                        onDismiss()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(
+                            2.dp,
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0xFFB2C3FF),
+                                    Color(0xFF667EEA)
+                                )
+                            ),
+                            RoundedCornerShape(18.dp)
+                        ),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.25f)
+                    )
+                ) {
+                    Text(
+                        "Stay Here!",
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF667EEA),
+                        fontSize = 18.sp
+                    )
+                }
+            },
+
+            // Glass container
+            containerColor = Color.White.copy(alpha = 0.15f),
+            shape = RoundedCornerShape(30.dp)
+        )
+    }
 }
 
 @Composable
@@ -1772,4 +1839,3 @@ private fun String.toColorOrDefault(default: Color): Color = try {
 } catch (_: IllegalArgumentException) {
     default
 }
-

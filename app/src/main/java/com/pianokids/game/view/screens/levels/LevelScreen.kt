@@ -26,14 +26,12 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
 import com.pianokids.game.R
 import com.pianokids.game.utils.AudioPreviewPlayer
 import com.pianokids.game.utils.PianoSoundManager
@@ -47,8 +45,17 @@ import com.pianokids.game.view.components.PianoKeyboard
 import com.pianokids.game.viewmodel.AvatarViewModel
 import com.pianokids.game.viewmodel.LevelViewModel
 import com.pianokids.game.viewmodel.PianoViewModel
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import android.os.Build
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.pianokids.game.utils.ImageMapper
 import kotlinx.coroutines.delay
-
 
 @Composable
 fun LevelScreen(
@@ -69,19 +76,19 @@ fun LevelScreen(
     var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
     var showSuccessDialog by remember { mutableStateOf(false) }
     var showSublevelDialog by remember { mutableStateOf(false) }
+    var showFailDialog by remember { mutableStateOf(false) }
 
-    //delay the selected mode
+    // Delay mode selection
     var pendingMode by remember { mutableStateOf<PianoMode?>(null) }
 
-
-    // Load everything
+    // LOAD EVERYTHING
     LaunchedEffect(userId, levelId) {
         avatarViewModel.loadActiveAvatar()
         viewModel.loadLevel(levelId)
         viewModel.loadSublevels(userId, levelId)
     }
 
-    // REAL PIANO MODE — microphone
+    // REAL PIANO MODE LISTENING
     LaunchedEffect(selectedMode, showIntro, showPreview) {
         if (selectedMode == PianoMode.REAL_PIANO && !showIntro && !showPreview) {
             PitchDetector.startListening(context) { detected ->
@@ -91,14 +98,11 @@ fun LevelScreen(
         }
     }
 
+    // FAIL DIALOG TRIGGER
     LaunchedEffect(state.isFailed) {
-        if (state.isFailed) {
-            delay(1500)
-            viewModel.loadLevel(levelId)
-        }
+        if (state.isFailed) showFailDialog = true
     }
 
-    // Cleanup
     DisposableEffect(Unit) {
         onDispose {
             AudioPreviewPlayer.release()
@@ -125,13 +129,12 @@ fun LevelScreen(
 
     val level = state.currentLevel
 
-    // AUDIO PREVIEW STATE
+    // PREVIEW AUDIO STATE
     val audioPreviewUrl = level.previewAudioUrl
     val isAudioPlaying by AudioPreviewPlayer.isPlaying.collectAsState()
     val isAudioLoading by AudioPreviewPlayer.isLoading.collectAsState()
     val audioPos by AudioPreviewPlayer.currentPosition.collectAsState()
     val audioDuration by AudioPreviewPlayer.duration.collectAsState()
-
     val audioProgress = if (audioDuration > 0) audioPos.toFloat() / audioDuration else 0f
 
     // AUTO-START PREVIEW AFTER INTRO
@@ -170,9 +173,7 @@ fun LevelScreen(
         targetValue = if (!showIntro) 0.dp else (300).dp,
         animationSpec = tween(700, 150, easing = { OvershootInterpolator(1.2f).getInterpolation(it) })
     )
-
-    // SHOW AUDIO PREVIEW
-    // SHOW AUDIO PREVIEW—EVEN IF NO URL (fallback animation)
+    // SHOW AUDIO PREVIEW (or fallback)
     if (!showIntro && showPreview) {
 
         if (audioPreviewUrl != null) {
@@ -193,14 +194,14 @@ fun LevelScreen(
                 }
             )
         } else {
-            // ⭐ FALLBACK: no preview audio available
+            // Fallback if no preview audio exists
             AudioPreviewScreen(
                 levelTitle = level.title,
                 theme = level.theme,
                 isPlaying = false,
                 isLoading = false,
                 progress = 0f,
-                onPlayPause = { /* ignore */ },
+                onPlayPause = {},
                 onSkip = {
                     showPreview = false
                     selectedMode = pendingMode
@@ -210,12 +211,9 @@ fun LevelScreen(
         return
     }
 
-    // MAIN GAME UI — ONLY AFTER: intro finished, preview finished, mode selected, and sublevel selected
+    // MAIN GAME UI — when intro finished, preview finished, mode selected, and sublevel selected
     if (!showIntro && !showPreview && selectedMode != null && state.selectedSublevel != null) {
 
-// ***********************
-// (MAIN UI continues in PART 2)
-// ***********************
         Box(modifier = Modifier.fillMaxSize()) {
 
             val fallingAreaTopPadding = 96.dp
@@ -223,11 +221,17 @@ fun LevelScreen(
                 if (selectedMode == PianoMode.APP_PIANO) 260.dp else 190.dp
 
             // --------------------------------------------------
-            // BACKGROUND IMAGE + DARK OVERLAY
+            // BACKGROUND GIF + DARK OVERLAY
             // --------------------------------------------------
             AsyncImage(
-                model = level.backgroundUrl,
-                contentDescription = "bg",
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(R.drawable.ocean)
+                    .decoderFactory(
+                        if (Build.VERSION.SDK_INT >= 28) ImageDecoderDecoder.Factory()
+                        else GifDecoder.Factory()
+                    )
+                    .build(),
+                contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
@@ -247,7 +251,7 @@ fun LevelScreen(
             )
 
             // --------------------------------------------------
-            // FALLING NOTES — spans behind UI
+            // FALLING NOTES VISUALS
             // --------------------------------------------------
             val sublevelNotes = state.selectedSublevel?.notes ?: level.expectedNotes
             val noteDurations =
@@ -257,7 +261,7 @@ fun LevelScreen(
                 expectedNotes = sublevelNotes,
                 currentNoteIndex = state.currentNoteIndex,
                 noteDurations = noteDurations,
-                onNoteHit = { /* purely visual */ },
+                onNoteHit = { },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
@@ -275,7 +279,7 @@ fun LevelScreen(
             ) {
 
                 // ============================================================
-                //                     TOP BAR: SCORE + LIVES
+                //                        TOP BAR
                 // ============================================================
                 Row(
                     modifier = Modifier
@@ -283,6 +287,24 @@ fun LevelScreen(
                         .padding(top = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+
+                    // EXIT BUTTON
+                    IconButton(
+                        onClick = { onExit() },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(50))
+                            .border(2.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(50))
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_exit),
+                            contentDescription = "Exit Level",
+                            tint = Color.Red,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
 
                     // SCORE BADGE
                     Box(
@@ -297,14 +319,38 @@ fun LevelScreen(
                             .padding(horizontal = 20.dp, vertical = 10.dp)
                     ) {
                         Text(
-                            text = "Score: ${state.score}",
+                            text = "Progress: ${(state.progressPercentage * 100).toInt()}%",
                             color = Color.White,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
 
-                    // HEARTS
+                    // ============================================================
+                    // GAME PROGRESS BAR (UPDATED STAR LOGIC)
+                    // ============================================================
+                    Column(
+                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        val totalNotes = state.selectedSublevel?.notes?.size ?: level.expectedNotes.size
+                        val correctNotes = state.currentNoteIndex
+                        val accuracy = if (totalNotes > 0) correctNotes.toFloat() / totalNotes else 0f
+
+                        GameProgressBar(
+                            progress = state.progressPercentage,
+                            stars = when {
+                                accuracy >= 0.90f -> 3
+                                accuracy >= 0.70f -> 2
+                                accuracy >= 0.40f -> 1
+                                else -> 0
+                            }
+                        )
+                    }
+
+                    // ============================================================
+                    // HEARTS (LIVES)
+                    // ============================================================
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         modifier = Modifier
@@ -328,7 +374,7 @@ fun LevelScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // ============================================================
-                //                 HERO CARD + BOSS CARD SECTION
+                // HERO (AVATAR) + BOSS SECTION
                 // ============================================================
                 Row(
                     modifier = Modifier
@@ -338,32 +384,85 @@ fun LevelScreen(
                     verticalAlignment = Alignment.Top
                 ) {
 
-                    // -----------------------------
-                    // HERO CARD + SPEECH BUBBLE
-                    // -----------------------------
+                    val bossFloatX = floatingOffset(range = 6)
+                    val heroFloatX = floatingOffset(range = 6, duration = 2600)
+
+                    // LEFT SIDE — BOSS + WRONG/CORRECT BUBBLES
+                    Row(
+                        modifier = Modifier.offset(x = bossOffsetX + bossFloatX),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+
+                        Image(
+                            painter = painterResource(id = ImageMapper.bossImage(level.theme)),
+                            contentDescription = "Boss",
+                            modifier = Modifier
+                                .size(170.dp, 240.dp)
+                                .clip(RoundedCornerShape(32.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+
+                        // WRONG BUBBLE
+                        AnimatedVisibility(
+                            visible = state.wrongMessage != null,
+                            enter = scaleIn() + fadeIn(),
+                            exit = scaleOut() + fadeOut()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(200.dp)
+                                    .padding(bottom = 8.dp, start = 10.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .shadow(6.dp, RoundedCornerShape(16.dp))
+                                        .background(Color(0xFFFF5E62), RoundedCornerShape(16.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Text(
+                                        text = state.wrongMessage ?: "",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        lineHeight = 16.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        // FEEDBACK BUBBLE
+                        AnimatedVisibility(
+                            visible = state.feedbackMessage != null,
+                            enter = fadeIn() + scaleIn(),
+                            exit = fadeOut() + scaleOut()
+                        ) {
+                            HeroSpeechBubble(
+                                message = state.feedbackMessage.orEmpty(),
+                                isPositive = state.isFeedbackPositive,
+                                modifier = Modifier.padding(bottom = 8.dp, start = 12.dp)
+                            )
+                        }
+                    }
+
+                    // RIGHT SIDE — AVATAR
                     Row(
                         modifier = Modifier
-                            .offset(x = avatarOffsetX)
-                            .padding(end = 8.dp),
+                            .offset(x = avatarOffsetX + heroFloatX)
+                            .shadow(12.dp, RoundedCornerShape(32.dp))
+                            .padding(start = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.Top
                     ) {
+
+                        val avatarUrl = activeAvatar?.avatarImageUrl
+                            ?: userPrefs.getAvatarThumbnail()
+
                         Box(
                             modifier = Modifier
                                 .size(width = 170.dp, height = 240.dp)
-                                .border(
-                                    3.dp,
-                                    brush = Brush.verticalGradient(
-                                        listOf(Color(0xFF00D9FF), Color(0xFF667EEA))
-                                    ),
-                                    RoundedCornerShape(24.dp)
-                                )
-                                .clip(RoundedCornerShape(24.dp))
+                                .clip(RoundedCornerShape(32.dp))
                         ) {
-
-                            val avatarUrl = activeAvatar?.avatarImageUrl
-                                ?: userPrefs.getAvatarThumbnail()
-
                             if (!avatarUrl.isNullOrBlank()) {
                                 AsyncImage(
                                     model = avatarUrl,
@@ -388,236 +487,11 @@ fun LevelScreen(
                                     Text("🦸", fontSize = 80.sp)
                                 }
                             }
-
-                            // HERO LABEL
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                Color.Transparent,
-                                                Color.Black.copy(alpha = 0.7f)
-                                            )
-                                        )
-                                    )
-                                    .align(Alignment.BottomCenter)
-                                    .padding(8.dp)
-                            ) {
-                                Text(
-                                    "HERO",
-                                    color = Color(0xFF00D9FF),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.align(Alignment.Center)
-                                )
-                            }
-                        }
-
-                        AnimatedVisibility(
-                            visible = state.feedbackMessage != null,
-                            enter = fadeIn() + scaleIn(),
-                            exit = fadeOut() + scaleOut()
-                        ) {
-                            HeroSpeechBubble(
-                                message = state.feedbackMessage.orEmpty(),
-                                isPositive = state.isFeedbackPositive
-                            )
-                        }
-                    }
-
-                    // -----------------------------
-                    // BOSS CARD + SPEECH BUBBLE
-                    // -----------------------------
-                    Column(horizontalAlignment = Alignment.End) {
-
-                        // Speech bubble above boss
-                        AnimatedVisibility(
-                            visible = state.wrongMessage != null,
-                            enter = scaleIn() + fadeIn(),
-                            exit = scaleOut() + fadeOut()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .width(200.dp)
-                                    .padding(bottom = 8.dp, end = 10.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .shadow(6.dp, RoundedCornerShape(16.dp))
-                                        .background(Color(0xFFFF5E62), RoundedCornerShape(16.dp))
-                                        .padding(12.dp)
-                                ) {
-                                    Text(
-                                        text = state.wrongMessage ?: "",
-                                        color = Color.White,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        lineHeight = 16.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        // Boss card
-                        Box(
-                            modifier = Modifier
-                                .offset(x = bossOffsetX)
-                                .size(width = 170.dp, height = 240.dp)
-                                .shadow(12.dp, RoundedCornerShape(24.dp))
-                                .border(
-                                    3.dp,
-                                    brush = Brush.verticalGradient(
-                                        listOf(Color(0xFFFF6B9D), Color(0xFFFF5E62))
-                                    ),
-                                    RoundedCornerShape(24.dp)
-                                )
-                                .clip(RoundedCornerShape(24.dp))
-                        ) {
-                            AsyncImage(
-                                model = level.bossUrl,
-                                contentDescription = "Boss",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(
-                                                Color.Transparent,
-                                                Color.Black.copy(alpha = 0.7f)
-                                            )
-                                        )
-                                    )
-                                    .align(Alignment.BottomCenter)
-                                    .padding(8.dp)
-                            ) {
-                                Text(
-                                    "BOSS",
-                                    color = Color(0xFFFF6B9D),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.align(Alignment.Center)
-                                )
-                            }
                         }
                     }
                 }
-
                 // ============================================================
-                //                       PROGRESS BAR
-                // ============================================================
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(x = shakeOffset.dp)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-
-                    // MINI HERO CARD
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .border(2.dp, Color(0xFF00D9FF), RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                    ) {
-                        val thumb = activeAvatar?.avatarImageUrl ?: userPrefs.getAvatarThumbnail()
-                        if (!thumb.isNullOrBlank()) {
-                            AsyncImage(
-                                model = thumb,
-                                contentDescription = "Hero Thumb",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color(0xFF667EEA)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("🦸", fontSize = 28.sp)
-                            }
-                        }
-                    }
-
-                    // PROGRESS BAR
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Progress: ${(state.progressPercentage * 100).toInt()}%",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(24.dp)
-                                .shadow(8.dp, RoundedCornerShape(12.dp))
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.Black.copy(alpha = 0.5f))
-                                .border(
-                                    2.dp,
-                                    Color(0xFF00D9FF).copy(alpha = 0.3f),
-                                    RoundedCornerShape(12.dp)
-                                )
-                                .drawBehind {
-                                    if (state.showWrongAnimation) {
-                                        drawRoundRect(
-                                            color = Color.Red,
-                                            size = size,
-                                            cornerRadius = CornerRadius(12f, 12f),
-                                            style = Stroke(width = 3f)
-                                        )
-                                    }
-                                }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(state.progressPercentage)
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(
-                                                Color(0xFF00D9FF),
-                                                Color(0xFF667EEA),
-                                                Color(0xFF764BA2)
-                                            )
-                                        ),
-                                        RoundedCornerShape(12.dp)
-                                    )
-                            )
-                        }
-                    }
-
-                    // MINI BOSS CARD
-                    Box(
-                        modifier = Modifier
-                            .size(50.dp)
-                            .border(2.dp, Color(0xFFFF6B9D), RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                    ) {
-                        AsyncImage(
-                            model = level.bossUrl,
-                            contentDescription = "Boss Thumb",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-                // ============================================================
-                //     INSTRUMENT SELECTOR (only if APP_PIANO mode)
+                // INSTRUMENT SELECTOR (APP_PIANO MODE)
                 // ============================================================
                 if (selectedMode == PianoMode.APP_PIANO) {
 
@@ -644,7 +518,9 @@ fun LevelScreen(
                                     PianoSoundManager.setInstrument(instrument)
                                 },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isSelected) Color(0xFF667EEA) else Color(0xFF2C2C2C),
+                                    containerColor =
+                                        if (isSelected) Color(0xFF667EEA)
+                                        else Color(0xFF2C2C2C),
                                     contentColor = Color.White
                                 ),
                                 modifier = Modifier
@@ -654,9 +530,7 @@ fun LevelScreen(
                                         RoundedCornerShape(12.dp)
                                     )
                             ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
                                         text = instrumentIcons[instrument] ?: "🎵",
                                         fontSize = 20.sp
@@ -691,7 +565,6 @@ fun LevelScreen(
                             pianoViewModel.onKeyPressed(key)
 
                             if (state.currentNoteIndex < (state.selectedSublevel?.notes?.size ?: 0)) {
-
                                 if (key.solfege != lastPlayedNote) {
                                     lastPlayedNote = key.solfege
                                     viewModel.onNotePlayed(key.solfege)
@@ -715,7 +588,7 @@ fun LevelScreen(
                 }
 
                 // ============================================================
-                // REAL PIANO MODE (MIC LISTENING UI)
+                // REAL PIANO MODE (MIC LISTENING)
                 // ============================================================
                 else if (selectedMode == PianoMode.REAL_PIANO) {
 
@@ -729,7 +602,7 @@ fun LevelScreen(
                             .shadow(12.dp, RoundedCornerShape(24.dp))
                             .background(
                                 Brush.verticalGradient(
-                                    colors = listOf(
+                                    listOf(
                                         Color(0xFF1A1A2E).copy(alpha = 0.9f),
                                         Color(0xFF16213E).copy(alpha = 0.9f)
                                     )
@@ -744,24 +617,18 @@ fun LevelScreen(
                             .padding(24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
 
                             val pulseScale by rememberInfiniteTransition().animateFloat(
                                 initialValue = 1f,
                                 targetValue = 1.2f,
                                 animationSpec = infiniteRepeatable(
-                                    animation = tween(1000, easing = FastOutSlowInEasing),
-                                    repeatMode = RepeatMode.Reverse
+                                    tween(1000, easing = FastOutSlowInEasing),
+                                    RepeatMode.Reverse
                                 )
                             )
 
-                            Text(
-                                "🎤",
-                                fontSize = 64.sp,
-                                modifier = Modifier.scale(pulseScale)
-                            )
+                            Text("🎤", fontSize = 64.sp, modifier = Modifier.scale(pulseScale))
 
                             Spacer(modifier = Modifier.height(16.dp))
 
@@ -803,34 +670,139 @@ fun LevelScreen(
             }
 
             // ============================================================
-            // FAIL OVERLAY
+            // FAIL DIALOG (GLASSY)
             // ============================================================
-            if (state.isFailed) {
+            if (showFailDialog) {
+
+                val outerShape = RoundedCornerShape(28.dp)
+                val innerShape = RoundedCornerShape(24.dp)
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.65f)),
+                        .background(Color.Black.copy(alpha = 0.75f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "Out of lives!",
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth(0.85f)
+                            .wrapContentHeight()
+                            .padding(vertical = 16.dp),
+                        shape = outerShape,
+                        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                        border = BorderStroke(
+                            width = 3.dp,
+                            brush = Brush.linearGradient(
+                                listOf(
+                                    Color(0xFF667EEA),
+                                    Color(0xFF00D9FF),
+                                    Color(0xFFFFC857)
+                                )
+                            )
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "Restarting the level...",
-                            color = Color.White.copy(alpha = 0.8f),
-                            fontSize = 16.sp
-                        )
+                    ) {
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(innerShape)
+                        ) {
+
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                Color.White.copy(alpha = 0.22f),
+                                                Color.White.copy(alpha = 0.10f)
+                                            )
+                                        )
+                                    )
+                                    .blur(22.dp)
+                                    .border(
+                                        1.dp,
+                                        Color.White.copy(alpha = 0.30f),
+                                        innerShape
+                                    )
+                            )
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 28.dp, vertical = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(20.dp)
+                            ) {
+
+                                Text("💔", fontSize = 72.sp)
+
+                                Text(
+                                    "Out of Lives!",
+                                    fontSize = 30.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color.White
+                                )
+
+                                Text(
+                                    "Choose what to do next:",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+
+                                Spacer(Modifier.height(16.dp))
+
+                                Button(
+                                    onClick = {
+                                        showFailDialog = false
+                                        viewModel.loadLevel(levelId)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFFFFC857)
+                                    ),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Text(
+                                        "Restart Level",
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        showFailDialog = false
+                                        onExit()
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = BorderStroke(2.dp, Color.White.copy(alpha = 0.6f))
+                                ) {
+                                    Text(
+                                        "Exit Level",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
+
         }
     }
-
     // ============================================================
     // LEVEL COMPLETED → SAVE PROGRESS + SHOW SUCCESS DIALOG
     // ============================================================
@@ -841,14 +813,20 @@ fun LevelScreen(
         }
     }
 
+    val totalNotes = level.expectedNotes.size
+    val correctNotes = state.currentNoteIndex
+    val accuracy = if (totalNotes > 0) correctNotes.toFloat() / totalNotes else 0f
+
+    val stars = when {
+        accuracy >= 0.90f -> 3
+        accuracy >= 0.70f -> 2
+        accuracy >= 0.40f -> 1
+        else -> 0
+    }
+
     if (showSuccessDialog) {
         LevelCompletedDialog(
-            stars = when {
-                state.score >= 85 -> 3
-                state.score >= 60 -> 2
-                state.score >= 30 -> 1
-                else -> 0
-            },
+            stars = stars,
             theme = level?.theme ?: "Default",
             onDismiss = {
                 showSuccessDialog = false
@@ -869,7 +847,8 @@ fun LevelScreen(
                         if (next.unlocked) {
                             // 👉 Move to next sublevel inside same level
                             viewModel.selectSublevel(next)
-                            // Show preview only before final sublevel (when moving to sublevel 5)
+
+                            // Show preview only before final sublevel
                             val isBeforeLastSublevel = next.index == all.size
                             showPreview = isBeforeLastSublevel
                             return@LevelCompletedDialog
@@ -877,7 +856,7 @@ fun LevelScreen(
                     }
                 }
 
-                // 👉 No next sublevel available → return to map
+                // 👉 No next sublevel → return to map
                 onExit()
             }
         )
@@ -891,6 +870,10 @@ fun LevelScreen(
             heroImageRes = when (level.theme) {
                 "Batman" -> R.drawable.hero_batman
                 "Spider-Man" -> R.drawable.hero_spiderman
+                "Detective Conan" -> R.drawable.hero_conan
+                "Black Panther" -> R.drawable.hero_bpanther
+                "Avengers Mix" -> R.drawable.hero_batman
+                "Hunter x Hunter" -> R.drawable.hero_hxh
                 else -> R.drawable.hero_batman
             },
             storyText = level.story,
@@ -901,9 +884,10 @@ fun LevelScreen(
             }
         )
     }
-    // -------------------------------------------------------------
+
+    // ============================================================
     // SUBLEVEL SELECTION DIALOG
-    // -------------------------------------------------------------
+    // ============================================================
     if (showSublevelDialog) {
         SublevelSelectionDialog(
             sublevels = state.sublevels,
@@ -915,10 +899,11 @@ fun LevelScreen(
                 pendingMode = mode
                 viewModel.selectSublevel(sublevel)
                 showSublevelDialog = false
-                // Only show preview before the last sublevel (index 5)
+
+                // Only show preview before the last sublevel
                 val isBeforeLastSublevel = sublevel.index == state.sublevels.size
                 showPreview = isBeforeLastSublevel
-                // If not showing preview, directly set the mode
+
                 if (!isBeforeLastSublevel) {
                     selectedMode = mode
                 }
@@ -926,6 +911,8 @@ fun LevelScreen(
         )
     }
 }
+
+
 @Composable
 private fun HeroSpeechBubble(
     message: String,
@@ -978,4 +965,121 @@ private fun HeroSpeechBubble(
             )
         }
     }
+}
+
+@Composable
+fun GameProgressBar(
+    progress: Float,
+    stars: Int
+) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = tween(700, easing = FastOutSlowInEasing)
+    )
+
+    // Glow animation on the progress fill
+    val glowAlpha by rememberInfiniteTransition().animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            tween(1200, easing = FastOutSlowInEasing),
+            RepeatMode.Reverse
+        )
+    )
+
+    // Star unlock bounce
+    val bounceScale = remember(stars) { Animatable(1f) }
+    LaunchedEffect(stars) {
+        bounceScale.animateTo(1.3f, tween(200))
+        bounceScale.animateTo(1f, tween(200))
+    }
+
+    // ----------------------------
+    // CONTAINER (centered)
+    // ----------------------------
+    Box(
+        modifier = Modifier
+            .width(300.dp)   // ⬅️ Small and clean like your layout
+            .height(38.dp),  // ⬅️ Taller so stars fit inside
+        contentAlignment = Alignment.Center
+    ) {
+
+        // --------------------------------------
+        // TRANSPARENT BACKGROUND + BORDER
+        // --------------------------------------
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(RoundedCornerShape(20.dp))
+                .border(3.dp, Color(0xFFB67D00), RoundedCornerShape(20.dp))
+                .background(Color.Transparent)
+        )
+
+        // --------------------------------------
+        // FILL BAR (behind stars)
+        // --------------------------------------
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(4.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .fillMaxWidth(animatedProgress)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color(0xFF7BE495),  // soft green
+                            Color(0xFF56C596)   // rich green
+                        )
+                    )
+                )
+                .drawBehind {
+                    drawRoundRect(
+                        color = Color.White,
+                        alpha = glowAlpha,
+                        cornerRadius = CornerRadius(16f, 16f)
+                    )
+                }
+        )
+
+        // --------------------------------------
+        // STARS OVERLAY (INSIDE the bar)
+        // --------------------------------------
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            (1..3).forEach { index ->
+                val unlocked = stars >= index
+                val starScale = if (unlocked) bounceScale.value else 1f
+
+                Icon(
+                    painter = painterResource(
+                        id = if (unlocked) R.drawable.star_filled else R.drawable.star_empty
+                    ),
+                    tint = Color.Unspecified,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .scale(starScale)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun floatingOffset(range: Int = 10, duration: Int = 2000): Dp {
+    val infiniteTransition = rememberInfiniteTransition()
+    val offset by infiniteTransition.animateFloat(
+        initialValue = -range.toFloat(),
+        targetValue = range.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(duration, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    return offset.dp
 }

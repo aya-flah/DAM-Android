@@ -3,6 +3,7 @@ package com.pianokids.game.view.screens
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -63,7 +64,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -100,6 +100,16 @@ import com.pianokids.game.viewmodel.AuthViewModel
 import com.pianokids.game.viewmodel.AvatarViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.blur
+import androidx.compose.runtime.*
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.compose.foundation.background
+import androidx.compose.ui.platform.LocalContext
+import androidx.media3.common.util.UnstableApi
 
 private enum class OnboardingStep { AccountChoice, ReturningLogin, UniqueName, ProfileDetails, Greeting }
 
@@ -365,6 +375,7 @@ fun WelcomeScreen(
             .background(Brush.verticalGradient(listOf(SkyBlue, OceanLight, OceanDeep)))
     ) {
         AnimatedOceanWithIslands()
+        WelcomeLogoTopLeft()
 
         if (isLoading) {
             Box(
@@ -708,66 +719,67 @@ private fun KidWelcomeCard(
     onDevLogin: () -> Unit,
     onChangeProfile: () -> Unit
 ) {
+    val outerShape = RoundedCornerShape(40.dp)
     val innerShape = RoundedCornerShape(32.dp)
 
     Card(
         modifier = modifier
-            .padding(vertical = 16.dp)
-            .shadow(28.dp, RoundedCornerShape(40.dp))
-            .border(
-                width = 4.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFFFB6D6C),
-                        Color(0xFFFFC857),
-                        Color(0xFF5BE7C4)
-                    )
-                ),
-                shape = RoundedCornerShape(40.dp)
-            ),
-        shape = RoundedCornerShape(40.dp),
+            .padding(vertical = 16.dp),
+        shape = outerShape,
         colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent,
-            contentColor = Color.White
+            containerColor = Color.Transparent
+        ),
+        border = BorderStroke(
+            width = 3.dp,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color(0xFF667EEA),
+                    Color(0xFF00D9FF),
+                    Color(0xFFFFC857)
+                )
+            )
         )
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(innerShape)
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF4E54C8),
-                            Color(0xFF8F94FB),
-                            Color(0xFFFF9A9E)
+        ) {
+            // 🔹 Blurred glass background ONLY
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.22f),
+                                Color.White.copy(alpha = 0.10f)
+                            )
                         )
                     )
-                )
-        ) {
+                    .blur(22.dp) // this uses Compose modifier, works with minSdk 24
+                    .border(
+                        1.dp,
+                        Color.White.copy(alpha = 0.30f),
+                        innerShape
+                    )
+            )
+
+            // 🔹 Foreground content (NOT blurred)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.2f))
-                    .padding(horizontal = 32.dp, vertical = 40.dp),
+                    .padding(horizontal = 28.dp, vertical = 32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(28.dp)
+                verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.cat_logo),
-                    contentDescription = "Piano Kids Logo",
-                    modifier = Modifier
-                        .size(96.dp)
-                        .clip(CircleShape)
-                )
-
                 KidStepIndicator(currentStep = step)
-
                 when (step) {
                     OnboardingStep.AccountChoice -> AccountChoiceStep(
                         onChooseExisting = onChooseExisting,
                         onChooseNew = onChooseNew
                     )
+
                     OnboardingStep.ReturningLogin -> ReturningLoginStep(
                         uniqueName = returningUniqueName,
                         onUniqueNameChange = onReturningNameChange,
@@ -775,6 +787,7 @@ private fun KidWelcomeCard(
                         errorMessage = returningError,
                         onBack = onBackToChoice
                     )
+
                     OnboardingStep.UniqueName -> UniqueNameStep(
                         uniqueName = uniqueName,
                         errorMessage = uniqueNameError,
@@ -784,6 +797,7 @@ private fun KidWelcomeCard(
                         onGoogleClick = onGoogleClick,
                         onDevLogin = onDevLogin
                     )
+
                     OnboardingStep.ProfileDetails -> ProfileDetailsStep(
                         selectedAvatar = selectedAvatar,
                         backendAvatarImageUrl = backendAvatarImageUrl,
@@ -797,6 +811,7 @@ private fun KidWelcomeCard(
                         errorMessage = profileError,
                         onCreateProfile = onCreateProfile
                     )
+
                     OnboardingStep.Greeting -> GreetingStep(
                         kidProfile = kidProfile,
                         isAvatarSaving = isAvatarSaving,
@@ -809,6 +824,7 @@ private fun KidWelcomeCard(
         }
     }
 }
+
 
 @Composable
 private fun UniqueNameStep(
@@ -1363,3 +1379,53 @@ private fun String.toColorOrDefault(default: Color): Color = try {
 } catch (_: IllegalArgumentException) {
     default
 }
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun WelcomeLogoTopLeft() {
+    val context = LocalContext.current
+
+    // Build ExoPlayer instance
+    val exoPlayer = remember {
+        ExoPlayer.Builder(context).build().apply {
+            val videoItem = MediaItem.fromUri("android.resource://${context.packageName}/raw/cat_logo_animation")
+            setMediaItem(videoItem)
+            repeatMode = ExoPlayer.REPEAT_MODE_ALL     // loop forever
+            prepare()
+            playWhenReady = true
+        }
+    }
+
+    // Cleanup when Composable leaves
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .padding(start = 50.dp, top = 50.dp)
+            .size(200.dp)
+            .clip(RoundedCornerShape(24.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        AndroidView(
+            modifier = Modifier
+                .size(150.dp)
+                .clip(RoundedCornerShape(18.dp)),
+            factory = {
+                PlayerView(it).apply {
+                    player = exoPlayer
+                    useController = false   // hide playback buttons
+                    setShutterBackgroundColor(Color.Transparent.toArgb())
+                    layoutParams = android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                }
+            }
+        )
+    }
+}
+

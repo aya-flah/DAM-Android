@@ -4,6 +4,7 @@ import com.pianokids.game.data.models.Level
 import com.pianokids.game.data.models.LevelProgressRequest
 import com.pianokids.game.data.models.Sublevel
 import com.pianokids.game.data.models.UnlockedLevelsResponse
+import com.pianokids.game.data.models.UserTotalStarsResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -46,4 +47,10 @@ interface LevelApi {
     suspend fun getUnlockedLevels(
         @Path("userId") userId: String
     ): Response<UnlockedLevelsResponse>
+
+    @GET("levels/total-stars/{userId}")
+    suspend fun getUserTotalStars(
+        @Path("userId") userId: String
+    ): Response<UserTotalStarsResponse>
+
 }
