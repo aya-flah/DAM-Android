@@ -8,6 +8,7 @@ data class Sublevel(
     val description: String? = null,
     val difficulty: Int,
     val notes: List<String>,
+    val noteDurations: List<String>? = null, // "short" for tap, "long" for hold
     val maxStars: Int,
     val requiredStars: Int,
     val trackName: String? = null,

@@ -848,9 +848,13 @@ fun LevelScreen(
                             // 👉 Move to next sublevel inside same level
                             viewModel.selectSublevel(next)
 
-                            // Show preview only before final sublevel
-                            val isBeforeLastSublevel = next.index == all.size
-                            showPreview = isBeforeLastSublevel
+                            // Only show preview for the last sublevel
+                            val isLastSublevel = next.index == all.size
+                            showPreview = isLastSublevel && audioPreviewUrl != null
+                            
+                            if (!showPreview) {
+                                selectedMode = pendingMode
+                            }
                             return@LevelCompletedDialog
                         }
                     }
@@ -900,11 +904,11 @@ fun LevelScreen(
                 viewModel.selectSublevel(sublevel)
                 showSublevelDialog = false
 
-                // Only show preview before the last sublevel
-                val isBeforeLastSublevel = sublevel.index == state.sublevels.size
-                showPreview = isBeforeLastSublevel
-
-                if (!isBeforeLastSublevel) {
+                // Show preview only for first (index 1) or last sublevel
+                val isFirstOrLast = sublevel.index == 1 || sublevel.index == state.sublevels.size
+                showPreview = isFirstOrLast && audioPreviewUrl != null
+                
+                if (!showPreview) {
                     selectedMode = mode
                 }
             }

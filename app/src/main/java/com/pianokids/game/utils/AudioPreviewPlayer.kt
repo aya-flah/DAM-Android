@@ -35,7 +35,7 @@ object AudioPreviewPlayer {
     
     /**
      * Prepare audio from URL
-     * @param audioUrl Full URL to audio file (e.g., http://192.168.100.21:3000/audio/levels/batman-preview.mp3)
+     * @param audioUrl Full URL to audio file (e.g., http://10.0.2.2:3000/audio/levels/batman-preview.mp3)
      * @param onReady Callback when audio is ready to play
      * @param onComplete Callback when playback completes
      * @param onError Callback on error
