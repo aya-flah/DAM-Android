@@ -50,6 +50,8 @@ import coil.decode.ImageDecoderDecoder
 import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
@@ -223,9 +225,11 @@ fun LevelScreen(
             // --------------------------------------------------
             // BACKGROUND GIF + DARK OVERLAY
             // --------------------------------------------------
+            val bgGif = ImageMapper.backgroundFor(level.theme)
+
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(R.drawable.ocean)
+                    .data(bgGif)
                     .decoderFactory(
                         if (Build.VERSION.SDK_INT >= 28) ImageDecoderDecoder.Factory()
                         else GifDecoder.Factory()
@@ -275,7 +279,8 @@ fun LevelScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
 
                 // ============================================================
@@ -304,7 +309,7 @@ fun LevelScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     // SCORE BADGE
                     Box(
@@ -669,6 +674,21 @@ fun LevelScreen(
                 Spacer(modifier = Modifier.height(30.dp))
             }
 
+            // block user interaction with game once the success/failure dialogs appear
+            if (showFailDialog || showSuccessDialog) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    awaitPointerEvent()  // consume all events
+                                }
+                            }
+                        }
+                )
+            }
+
             // ============================================================
             // FAIL DIALOG (GLASSY)
             // ============================================================
@@ -813,7 +833,8 @@ fun LevelScreen(
         }
     }
 
-    val totalNotes = level.expectedNotes.size
+    // Use the SAME logic as the in-game progress bar: base it on the current sublevel
+    val totalNotes = state.selectedSublevel?.notes?.size ?: level.expectedNotes.size
     val correctNotes = state.currentNoteIndex
     val accuracy = if (totalNotes > 0) correctNotes.toFloat() / totalNotes else 0f
 
@@ -876,7 +897,7 @@ fun LevelScreen(
                 "Spider-Man" -> R.drawable.hero_spiderman
                 "Detective Conan" -> R.drawable.hero_conan
                 "Black Panther" -> R.drawable.hero_bpanther
-                "Avengers Mix" -> R.drawable.hero_batman
+                "Avengers Mix" -> R.drawable.hero_avengers
                 "Hunter x Hunter" -> R.drawable.hero_hxh
                 else -> R.drawable.hero_batman
             },

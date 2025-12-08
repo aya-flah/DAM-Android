@@ -216,6 +216,7 @@ fun HomeScreen(
     }
 
     // ----- LOAD LEVELS FROM BACKEND -----
+    // ----- LOAD LEVELS + UNLOCK STATE FROM BACKEND (SUBLEVEL-BASED) -----
     LaunchedEffect(isLoggedIn) {
         isLoading = true
 
@@ -227,56 +228,63 @@ fun HomeScreen(
             if (level.order == 0) level.copy(order = index + 1) else level
         }.sortedBy { it.order }
 
-        // 2️⃣ Load user unlock info ONCE (no repetition)
-        val unlockResponse =
-            if (isLoggedIn && userId != "guest")
-                levelRepository.getUnlockedLevels(userId)
-            else null
+        // Guest mode: only Level 1 unlocked, no sublevel calls
+        if (!isLoggedIn || userId == "guest") {
+            progressMap = levels.associate { level ->
+                val isUnlocked = level.order == 1   // guest: only first level
+                level._id to UnlockedLevelItem(
+                    levelId = level._id,
+                    title = level.title,
+                    theme = level.theme,
+                    unlocked = isUnlocked,
+                    starsUnlocked = 0,
+                    backgroundUrl = level.backgroundUrl,
+                    bossUrl = level.bossUrl,
+                    musicUrl = level.musicUrl
+                )
+            }
 
-        val unlockedBackendList = unlockResponse?.levels ?: emptyList()
+            totalStars = 0
+            maxStars = 0
+            isLoading = false
+            return@LaunchedEffect
+        }
 
-        // Build a lookup table for quick access
-        val unlockedMapBackend = unlockedBackendList.associateBy { it.levelId }
+        // Logged-in user → use SUBLEVEL PROGRESS to drive everything
+        var sumStars = 0
+        var sumMaxStars = 0
+        val mapBuilder = mutableMapOf<String, UnlockedLevelItem>()
 
-        // 4️⃣ Build final progress map (Frontend interpretation)
-        progressMap = levels.associate { level ->
+        for (level in levels) {
+            // Get all sublevels for this level from backend (enriched with unlocked, stars, etc.)
+            val sublevels = sublevelProgRepository.getUserSublevels(userId, level._id) ?: emptyList()
 
-            val backend = unlockedMapBackend[level._id]
+            val earnedForLevel = sublevels.sumOf { it.starsEarned }
+            val possibleForLevel = sublevels.sumOf { it.maxStars }
 
-            val isUnlocked =
-                when {
-                    level.order == 1 -> true // Level 1 always unlocked
-                    isLoggedIn && backend != null -> backend.unlocked
-                    isLoggedIn -> false
-                    else -> false // guest: only level 1 is unlocked, others false
-                }
+            sumStars += earnedForLevel
+            sumMaxStars += possibleForLevel
 
-            val stars = backend?.starsUnlocked ?: 0
+            // 🔑 iOS logic: a LEVEL is unlocked if ANY of its sublevels is unlocked
+            val isUnlockedForLevel = when {
+                level.order == 1 -> true                           // Level 1 always unlocked
+                sublevels.isEmpty() -> false                       // no data → keep locked
+                else -> sublevels.any { it.unlocked }              // new logic
+            }
 
-            level._id to UnlockedLevelItem(
+            mapBuilder[level._id] = UnlockedLevelItem(
                 levelId = level._id,
                 title = level.title,
                 theme = level.theme,
-                unlocked = isUnlocked,
-                starsUnlocked = stars,
+                unlocked = isUnlockedForLevel,
+                starsUnlocked = earnedForLevel,                    // stars earned in this level
                 backgroundUrl = level.backgroundUrl,
                 bossUrl = level.bossUrl,
                 musicUrl = level.musicUrl
             )
         }
 
-        // sublevel stars
-        var sumStars = 0
-        var sumMaxStars = 0
-
-        for (level in levels) {
-            // Get all sublevels for this level from backend
-            val sublevels = sublevelProgRepository.getUserSublevels(userId, level._id) ?: emptyList()
-
-            sumStars += sublevels.sumOf { it.starsEarned }          // earned
-            sumMaxStars += sublevels.sumOf { it.maxStars }    // possible
-        }
-
+        progressMap = mapBuilder
         totalStars = sumStars
         maxStars = sumMaxStars
 
@@ -1169,7 +1177,7 @@ fun ComingSoonDialog(onDismiss: () -> Unit) {
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    "Complete previous levels to unlock this one!",
+                    "Earn more stars in earlier missions to unlock this level!",
                     color = Color(0xFFE0E0E0),
                     textAlign = TextAlign.Center,
                     fontSize = 16.sp

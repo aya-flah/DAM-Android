@@ -490,9 +490,7 @@ fun getThemeColors(theme: String): ThemeColors {
         // -----------------------------------
         // 🛡️ MARVEL TRIO (Iron Man + Cap + Flash)
         // -----------------------------------
-        "marvel", "iron man", "captain america", "flash",
-        "Avengers Mix",
-        "mcu trio" -> ThemeColors(
+        "Heroes Of Harmony" -> ThemeColors(
             background1 = Color(0xFFB71C1C),  // Iron Man red
             background2 = Color(0xFF880E4F),  // Flash-magenta vibe
             accent = Color(0xFF0D47A1),       // Captain America blue

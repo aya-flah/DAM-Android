@@ -2,7 +2,6 @@ package com.pianokids.game.api
 
 import com.pianokids.game.data.models.Sublevel
 import com.pianokids.game.data.models.SublevelProgressRequest
-import com.pianokids.game.data.models.UserLevelDataResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST

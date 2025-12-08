@@ -45,25 +45,6 @@ class LevelViewModel : ViewModel() {
     private var lastCorrectTimeMs: Long = 0
 
     /**
-     * Load unlocked levels for a user (original behaviour for now)
-     */
-    fun loadUnlockedLevels(userId: String) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
-
-            val unlockedResponse = repository.getUnlockedLevels(userId)
-            val unlockedMap = unlockedResponse?.levels?.associate {
-                it.levelId to it.unlocked
-            } ?: emptyMap()
-
-            _uiState.value = _uiState.value.copy(
-                unlockedLevels = unlockedMap,
-                isLoading = false
-            )
-        }
-    }
-
-    /**
      * Load a single level by its backend id
      */
     fun loadLevel(levelId: String) {
