@@ -9,7 +9,7 @@ object ImageMapper {
         "Spider-Man" -> "🕸️"
         "Detective Conan" -> "🔎"
         "Black Panther" -> "🐾"
-        "Avengers Mix" -> "⚡"
+        "Ronin Warriors" -> "🥷"
         "Hunter x Hunter" -> "🎯"
         else -> "🎵"
     }
@@ -20,7 +20,7 @@ object ImageMapper {
             "Spider-Man" -> R.drawable.spiderman
             "Detective Conan" -> R.drawable.conan
             "Black Panther" -> R.drawable.black_panther
-            "Avengers Mix" -> R.drawable.ironman
+            "Ronin Warriors" -> R.drawable.ryo_rw
             "Hunter x Hunter" -> R.drawable.hxh
             else -> R.drawable.kirb
         }
@@ -32,7 +32,7 @@ object ImageMapper {
             "Spider-Man" -> R.drawable.level_2
             "Detective Conan" -> R.drawable.level_3
             "Black Panther" -> R.drawable.level_4
-            "Avengers Mix" -> R.drawable.level_5
+            "Ronin Warriors" -> R.drawable.level_5
             "Hunter x Hunter" -> R.drawable.level_6
             else -> R.drawable.kirb
         }
@@ -45,7 +45,7 @@ object ImageMapper {
             "Spider-Man" -> R.drawable.bg_spiderman_gif
             "Detective Conan" -> R.drawable.bg_conan_gif
             "Black Panther" -> R.drawable.bg_panther_gif
-            "Avengers Mix" -> R.drawable.bg_avengers_gif
+            "Ronin Warriors" -> R.drawable.bg_ronin_warriors_gif
             "Hunter x Hunter" -> R.drawable.bg_hxh_gif
 
             else -> R.drawable.ocean

@@ -39,7 +39,12 @@ fun LevelCompletedDialog(
         "Spider-Man", "spiderman" -> Triple("WEB-TASTIC!", "Your friendly neighbor is proud! 🕷️", "🕷️")
         "Detective Conan", "conan" -> Triple("CASE CLOSED!", "Conan solved the mystery thanks to you! 🔎", "🔎")
         "Black Panther", "wakanda" -> Triple("WAKANDA FOREVER!", "Your rhythm protected the kingdom! 🐾", "🐾")
-        "avengers", "Avengers Mix", "marvel mix" -> Triple("HEROIC VICTORY!", "Earth’s Mightiest Heroes salute you! ⚡", "⚡")
+        "Ronin Warriors", "ronin warriors" ->
+            Triple(
+                "PATH OF THE RONIN CROSSED!",
+                "Your blade moved in perfect harmony 🥷⚔️",
+                "🥷"
+            )
         "Hunter x Hunter", "hxh" -> Triple("HUNTER RANK UP!", "Your Nen is growing stronger! 🟢", "🟢")
         else -> Triple("Level Complete!", "Amazing job! 🎉", "🎉")
     }
@@ -49,14 +54,14 @@ fun LevelCompletedDialog(
         "Spider-Man", "spiderman" -> Color(0xFFE53935)
         "Detective Conan", "conan" -> Color(0xFF1E4BA3)
         "Black Panther", "wakanda" -> Color(0xFF5528FF)
-        "avengers", "Avengers Mix", "marvel mix" -> Color(0xFF673AB7)
+        "Ronin Warriors", "ronin warriors" -> Color(0xFF8B1E1E)
         "Hunter x Hunter", "hxh" -> Color(0xFF1B5E20)
         else -> Color.White
     }
 
     val textColor = when (theme.lowercase()) {
         "batman", "spider-man", "spiderman", "detective conan", "conan",
-        "black panther", "wakanda", "avengers", "avengers mix", "marvel mix",
+        "black panther", "wakanda", "ronin warriors",
         "hunter x hunter", "hxh" -> Color.White
         else -> Color.Black
     }

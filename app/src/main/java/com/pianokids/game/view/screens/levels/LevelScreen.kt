@@ -897,7 +897,7 @@ fun LevelScreen(
                 "Spider-Man" -> R.drawable.hero_spiderman
                 "Detective Conan" -> R.drawable.hero_conan
                 "Black Panther" -> R.drawable.hero_bpanther
-                "Avengers Mix" -> R.drawable.hero_avengers
+                "Ronin Warriors" -> R.drawable.hero_ronin_warriors
                 "Hunter x Hunter" -> R.drawable.hero_hxh
                 else -> R.drawable.hero_batman
             },
