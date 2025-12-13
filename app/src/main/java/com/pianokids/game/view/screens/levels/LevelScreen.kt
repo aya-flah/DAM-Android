@@ -131,31 +131,41 @@ fun LevelScreen(
 
     val level = state.currentLevel
 
-    // PREVIEW AUDIO STATE
-    val audioPreviewUrl = level.previewAudioUrl
+    // PREVIEW AUDIO STATE — manual preview button + before sublevel 5
+    val audioPreviewUrl = level.previewAudioUrl ?: "http://10.0.2.2:3000/audio/levels/batman-preview.mp3"
+    var hasPlayedSublevel5Preview by remember { mutableStateOf(false) }
     val isAudioPlaying by AudioPreviewPlayer.isPlaying.collectAsState()
     val isAudioLoading by AudioPreviewPlayer.isLoading.collectAsState()
     val audioPos by AudioPreviewPlayer.currentPosition.collectAsState()
     val audioDuration by AudioPreviewPlayer.duration.collectAsState()
     val audioProgress = if (audioDuration > 0) audioPos.toFloat() / audioDuration else 0f
 
-    // AUTO-START PREVIEW AFTER INTRO
-    LaunchedEffect(showIntro, audioPreviewUrl) {
-        if (!showIntro && audioPreviewUrl != null && !showPreview) {
-            showPreview = true
-            AudioPreviewPlayer.prepare(
-                context = context,
-                audioUrl = audioPreviewUrl,
-                onReady = { AudioPreviewPlayer.play() },
-                onComplete = {
-                    showPreview = false
-                    selectedMode = pendingMode
-                },
-                onError = {
-                    Log.e("LevelScreen", "Preview error: $it")
-                    showPreview = false
-                }
-            )
+    // Helper to launch preview playback on demand
+    fun launchPreview(onComplete: () -> Unit = {}) {
+        if (audioPreviewUrl == null) return
+        showPreview = true
+        AudioPreviewPlayer.prepare(
+            context = context,
+            audioUrl = audioPreviewUrl,
+            onReady = { AudioPreviewPlayer.play() },
+            onComplete = {
+                showPreview = false
+                onComplete()
+            },
+            onError = {
+                Log.e("LevelScreen", "Preview error: $it")
+                showPreview = false
+            }
+        )
+    }
+
+    // Remove auto-preview after intro. Manual preview handled via dialog button.
+
+    // PLAY PREVIEW AGAIN JUST BEFORE 5TH SUBLEVEL; skip others in between
+    LaunchedEffect(state.selectedSublevel?.index, audioPreviewUrl, hasPlayedSublevel5Preview) {
+        val isFifth = state.selectedSublevel?.index == 5
+        if (isFifth && audioPreviewUrl != null && !showPreview && !hasPlayedSublevel5Preview) {
+            launchPreview { hasPlayedSublevel5Preview = true }
         }
     }
 
@@ -192,7 +202,7 @@ fun LevelScreen(
                 onSkip = {
                     AudioPreviewPlayer.stop()
                     showPreview = false
-                    selectedMode = pendingMode
+                    if (pendingMode != null) selectedMode = pendingMode
                 }
             )
         } else {
@@ -206,7 +216,7 @@ fun LevelScreen(
                 onPlayPause = {},
                 onSkip = {
                     showPreview = false
-                    selectedMode = pendingMode
+                    if (pendingMode != null) selectedMode = pendingMode
                 }
             )
         }
@@ -866,16 +876,9 @@ fun LevelScreen(
                         val next = all[currentIndex + 1]
 
                         if (next.unlocked) {
-                            // 👉 Move to next sublevel inside same level
+                            // 👉 Move to next sublevel inside same level (no auto preview)
                             viewModel.selectSublevel(next)
-
-                            // Only show preview for the last sublevel
-                            val isLastSublevel = next.index == all.size
-                            showPreview = isLastSublevel && audioPreviewUrl != null
-                            
-                            if (!showPreview) {
-                                selectedMode = pendingMode
-                            }
+                            selectedMode = pendingMode
                             return@LevelCompletedDialog
                         }
                     }
@@ -920,18 +923,11 @@ fun LevelScreen(
                 showSublevelDialog = false
                 onExit()
             },
-            onPlay = { sublevel, mode ->
+            onPreviewAndStart = { sublevel, mode ->
                 pendingMode = mode
                 viewModel.selectSublevel(sublevel)
                 showSublevelDialog = false
-
-                // Show preview only for first (index 1) or last sublevel
-                val isFirstOrLast = sublevel.index == 1 || sublevel.index == state.sublevels.size
-                showPreview = isFirstOrLast && audioPreviewUrl != null
-                
-                if (!showPreview) {
-                    selectedMode = mode
-                }
+                launchPreview { selectedMode = mode }
             }
         )
     }

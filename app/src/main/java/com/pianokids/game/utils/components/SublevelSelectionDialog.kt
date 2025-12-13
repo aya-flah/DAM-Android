@@ -33,7 +33,7 @@ import com.pianokids.game.data.models.Sublevel
 fun SublevelSelectionDialog(
     sublevels: List<Sublevel>,
     onDismiss: () -> Unit,
-    onPlay: (Sublevel, PianoMode) -> Unit
+    onPreviewAndStart: (Sublevel, PianoMode) -> Unit
 ) {
     var selectedMode by remember { mutableStateOf<PianoMode?>(null) }
     var selectedSublevel by remember { mutableStateOf<Sublevel?>(null) }
@@ -449,7 +449,7 @@ fun SublevelSelectionDialog(
                             //---------------------------------------------------------
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 // CANCEL button (always enabled)
                                 OutlinedButton(
@@ -466,29 +466,28 @@ fun SublevelSelectionDialog(
                                     )
                                 }
 
-                                // PLAY Button (disabled until ready)
-                                val canPlay = selectedMode != null &&
+                                val canPreviewAndStart = selectedMode != null &&
                                         selectedSublevel != null &&
                                         selectedSublevel?.unlocked == true
 
                                 Button(
                                     onClick = {
-                                        if (canPlay) {
-                                            onPlay(selectedSublevel!!, selectedMode!!)
+                                        if (canPreviewAndStart) {
+                                            onPreviewAndStart(selectedSublevel!!, selectedMode!!)
                                         }
                                     },
-                                    enabled = canPlay,
+                                    enabled = canPreviewAndStart,
                                     modifier = Modifier.weight(1f).height(56.dp),
                                     shape = RoundedCornerShape(16.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (canPlay) Color(0xFF4CAF50) else Color(
+                                        containerColor = if (canPreviewAndStart) Color(0xFF00C9A7) else Color(
                                             0xFF9E9E9E
                                         ),
                                         disabledContainerColor = Color(0xFFBDBDBD)
                                     )
                                 ) {
                                     Text(
-                                        "Start Mission 🚀",
+                                        "Listen to Preview",
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
