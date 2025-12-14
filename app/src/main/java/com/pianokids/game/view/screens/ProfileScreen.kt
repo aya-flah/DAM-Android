@@ -55,6 +55,7 @@ import com.pianokids.game.utils.components.AvatarDetailDialog
 import com.pianokids.game.utils.components.AvatarImageView
 import com.pianokids.game.utils.components.AIAvatarPreviewDialog
 import com.pianokids.game.utils.components.KidFriendlyErrorDialog
+import com.pianokids.game.utils.components.SettingsDialog
 import com.pianokids.game.data.models.AvatarGenerationResponse
 import com.pianokids.game.data.repository.SublevelProgressRepository
 import kotlin.math.sin
@@ -1193,7 +1194,7 @@ fun KidsAchievementsSection(totalStars: Int, userLevel: Int) {
 
             // Progress text
             Text(
-                text = "$totalStars / 25 stars earned",
+                text = "$totalStars / 90 stars earned",
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = Color.White,
                     fontWeight = FontWeight.Bold,

@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -94,7 +96,8 @@ fun HomeScreen(
     onNavigateBack: () -> Unit = {},
     onNavigateToLevel: (String) -> Unit,
     onNavigateToMusic: () -> Unit = {},
-    onNavigateToKaraoke: () -> Unit = {}
+    onNavigateToKaraoke: () -> Unit = {},
+    onNavigateToMiniGames: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -107,9 +110,9 @@ fun HomeScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
     var showComingSoonDialog by remember { mutableStateOf(false) }
-    var showGuestLimitDialog by remember { mutableStateOf(false) }
     var showLoginDialog by remember { mutableStateOf(false) }
     var showCreateAvatarDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     var resumeAvatarFlowAfterLogin by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
@@ -150,11 +153,14 @@ fun HomeScreen(
     // Show avatar error
     LaunchedEffect(avatarError) {
         avatarError?.let { error ->
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "Error: $error",
-                    duration = SnackbarDuration.Short
-                )
+            val isNotFound = error.contains("404", ignoreCase = true) || error.contains("not found", ignoreCase = true)
+            if (!isNotFound) {
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Error: $error",
+                        duration = SnackbarDuration.Short
+                    )
+                }
             }
             avatarViewModel.clearError()
         }
@@ -177,8 +183,7 @@ fun HomeScreen(
     val userName by authViewModel.userName.collectAsState()
     val user = userPrefs.getUser()
 
-    val userId = user?.id ?: "guest"
-    val isGuest = userPrefs.isGuestMode()
+    val userId = user?.id
 
     val userPhotoUrl = user?.photoUrl
 
@@ -213,6 +218,9 @@ fun HomeScreen(
         if (isLoggedIn) {
             avatarViewModel.loadActiveAvatar()
         }
+        if (isLoggedIn) {
+            showLoginDialog = false
+        }
     }
 
     // ----- LOAD LEVELS FROM BACKEND -----
@@ -228,15 +236,13 @@ fun HomeScreen(
             if (level.order == 0) level.copy(order = index + 1) else level
         }.sortedBy { it.order }
 
-        // Guest mode: only Level 1 unlocked, no sublevel calls
-        if (!isLoggedIn || userId == "guest") {
+        if (!isLoggedIn) {
             progressMap = levels.associate { level ->
-                val isUnlocked = level.order == 1   // guest: only first level
                 level._id to UnlockedLevelItem(
                     levelId = level._id,
                     title = level.title,
                     theme = level.theme,
-                    unlocked = isUnlocked,
+                    unlocked = false,
                     starsUnlocked = 0,
                     backgroundUrl = level.backgroundUrl,
                     bossUrl = level.bossUrl,
@@ -247,8 +253,32 @@ fun HomeScreen(
             totalStars = 0
             maxStars = 0
             isLoading = false
+            showLoginDialog = true
             return@LaunchedEffect
         }
+
+        if (userId.isNullOrBlank()) {
+            progressMap = levels.associate { level ->
+                level._id to UnlockedLevelItem(
+                    levelId = level._id,
+                    title = level.title,
+                    theme = level.theme,
+                    unlocked = false,
+                    starsUnlocked = 0,
+                    backgroundUrl = level.backgroundUrl,
+                    bossUrl = level.bossUrl,
+                    musicUrl = level.musicUrl
+                )
+            }
+
+            totalStars = 0
+            maxStars = 0
+            isLoading = false
+            showLoginDialog = false
+            return@LaunchedEffect
+        }
+
+        val safeUserId = userId!!
 
         // Logged-in user → use SUBLEVEL PROGRESS to drive everything
         var sumStars = 0
@@ -257,7 +287,7 @@ fun HomeScreen(
 
         for (level in levels) {
             // Get all sublevels for this level from backend (enriched with unlocked, stars, etc.)
-            val sublevels = sublevelProgRepository.getUserSublevels(userId, level._id) ?: emptyList()
+            val sublevels = sublevelProgRepository.getUserSublevels(safeUserId, level._id) ?: emptyList()
 
             val earnedForLevel = sublevels.sumOf { it.starsEarned }
             val possibleForLevel = sublevels.sumOf { it.maxStars }
@@ -265,11 +295,14 @@ fun HomeScreen(
             sumStars += earnedForLevel
             sumMaxStars += possibleForLevel
 
-            // 🔑 iOS logic: a LEVEL is unlocked if ANY of its sublevels is unlocked
+            val isHiddenMelody = level.title.contains("hidden", ignoreCase = true)
+
+            // 🔑 Unlock logic: Level 1 always open; others unlock when they have progress.
             val isUnlockedForLevel = when {
                 level.order == 1 -> true                           // Level 1 always unlocked
                 sublevels.isEmpty() -> false                       // no data → keep locked
-                else -> sublevels.any { it.unlocked }              // new logic
+                isHiddenMelody -> sublevels.any { it.unlocked && it.starsEarned > 0 }
+                else -> sublevels.any { it.unlocked }
             }
 
             mapBuilder[level._id] = UnlockedLevelItem(
@@ -332,6 +365,10 @@ fun HomeScreen(
                     scope.launch { drawerState.close() }
                     onNavigateToMusic()
                 },
+                onMiniGamesClick = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToMiniGames()
+                },
                 onAddAvatarClick = {
                     scope.launch { drawerState.close() }
                     if (isLoggedIn) {
@@ -341,6 +378,10 @@ fun HomeScreen(
                         resumeAvatarFlowAfterLogin = true
                         showLoginDialog = true
                     }
+                },
+                onSettingsClick = {
+                    scope.launch { drawerState.close() }
+                    showSettingsDialog = true
                 }
             )
         }
@@ -413,7 +454,7 @@ fun HomeScreen(
                                 SoundManager.playClick()
 
                                 when {
-                                    isGuest && level.order != 1 -> showGuestLimitDialog = true
+                                    !isLoggedIn -> showLoginDialog = true
                                     !isUnlocked -> showComingSoonDialog = true
                                     else -> onNavigateToLevel(level._id)
                                 }
@@ -515,18 +556,14 @@ fun HomeScreen(
             )
         }
 
-        if (showGuestLimitDialog) {
-            GuestLimitDialog(
-                onDismiss = { showGuestLimitDialog = false },
-                onLoginClick = {
-                    showGuestLimitDialog = false
-                    showLoginDialog = true
-                }
-            )
-        }
-
         if (showComingSoonDialog) {
             ComingSoonDialog { showComingSoonDialog = false }
+        }
+
+        if (showSettingsDialog) {
+            com.pianokids.game.utils.components.SettingsDialog(
+                onDismiss = { showSettingsDialog = false }
+            )
         }
 
         // Avatar Creation Dialog
@@ -688,10 +725,13 @@ fun HomeProfileDrawer(
     accentColor: Color,
     onProfileClick: () -> Unit,
     onRecognizeClick: () -> Unit,
-    onAddAvatarClick: () -> Unit
+    onMiniGamesClick: () -> Unit,
+    onAddAvatarClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val drawerBackground = accentColor.mixWith(Color.Black, 0.55f)
     val avatarFrameColor = accentColor.mixWith(Color.White, 0.25f)
+    val drawerScroll = rememberScrollState()
 
     ModalDrawerSheet(
         modifier = Modifier
@@ -703,8 +743,9 @@ fun HomeProfileDrawer(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 20.dp, vertical = 32.dp)
+                .verticalScroll(drawerScroll),
+            verticalArrangement = Arrangement.Top
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -776,6 +817,16 @@ fun HomeProfileDrawer(
                 }
 
                 DrawerActionButton(
+                    icon = Icons.Default.SportsEsports,
+                    label = "Mini Games",
+                    description = "Learn notes with fun games",
+                    accentColor = RainbowGreen
+                ) {
+                    SoundManager.playClick()
+                    onMiniGamesClick()
+                }
+
+                DrawerActionButton(
                     icon = Icons.Default.Add,
                     label = if (isLoggedIn) "Add Avatar" else "Sign In & Add Avatar",
                     description = if (isLoggedIn) "Create a new hero" else "Tap to unlock custom avatars",
@@ -784,8 +835,18 @@ fun HomeProfileDrawer(
                     SoundManager.playClick()
                     onAddAvatarClick()
                 }
-            }
 
+                DrawerActionButton(
+                    icon = Icons.Default.Settings,
+                    label = "Settings",
+                    description = "Music, sound, vibration",
+                    accentColor = RainbowYellow
+                ) {
+                    SoundManager.playClick()
+                    onSettingsClick()
+                }
+            }
+            Spacer(Modifier.height(24.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = "Need help?",
@@ -1202,21 +1263,6 @@ fun ComingSoonDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-fun GuestLimitDialog(onDismiss: () -> Unit, onLoginClick: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Login required") },
-        text = { Text("Guests can only play Level 1.") },
-        confirmButton = {
-            Button(onClick = onLoginClick) { Text("Login") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
-    )
-}
-
-@Composable
 fun CompactGameHeader(
     userName: String,
     userPhotoUrl: String?,
@@ -1296,9 +1342,9 @@ fun CompactGameHeader(
                         )
                         Text(
                             text = when {
-                                !isLoggedIn -> "Guest mode • tap avatar to sign in"
-                                    avatarName != null -> "Avatar: $avatarName"
-                                    else -> "Tap avatar to open your quick menu"
+                                !isLoggedIn -> "Sign in to keep your progress"
+                                avatarName != null -> "Avatar: $avatarName"
+                                else -> "Tap avatar to open your quick menu"
                             },
                             style = MaterialTheme.typography.bodySmall.copy(
                                 color = Color.White.copy(alpha = 0.8f)

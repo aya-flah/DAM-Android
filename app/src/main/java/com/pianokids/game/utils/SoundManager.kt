@@ -25,7 +25,7 @@ object SoundManager {
 
     fun init(context: Context) {
         clickPlayer = MediaPlayer.create(context, R.raw.click1)
-        bgPlayer = MediaPlayer.create(context, R.raw.bg_music)?.apply {
+        bgPlayer = MediaPlayer.create(context, R.raw.bg_sound)?.apply {
             isLooping = true
             setVolume(0.4f, 0.4f)
         }

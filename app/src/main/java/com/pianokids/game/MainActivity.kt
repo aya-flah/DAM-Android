@@ -19,6 +19,7 @@ import com.facebook.FacebookSdk
 import com.pianokids.game.view.screens.HomeScreen
 import com.pianokids.game.view.screens.ProfileScreen
 import com.pianokids.game.view.screens.WelcomeScreen
+import com.pianokids.game.view.screens.MiniGamesScreen
 import com.pianokids.game.view.screens.MusicRecognitionScreen
 import com.pianokids.game.ui.theme.PianoKidsGameTheme
 import com.pianokids.game.utils.SocialLoginManager
@@ -175,7 +176,14 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToLevel = { levelId ->
                                     navController.navigate("level/$levelId")
                                 },
-                                onNavigateToMusic = { navController.navigate("music") }
+                                onNavigateToMusic = { navController.navigate("music") },
+                                onNavigateToMiniGames = { navController.navigate("minigames") }
+                            )
+                        }
+
+                        composable("minigames") {
+                            MiniGamesScreen(
+                                onNavigateBack = { navController.popBackStack() }
                             )
                         }
 

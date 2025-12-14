@@ -21,15 +21,20 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,7 +42,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -64,13 +73,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -80,6 +92,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import android.content.res.Configuration
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.pianokids.game.R
 import com.pianokids.game.data.models.KidProfile
@@ -96,6 +109,7 @@ import com.pianokids.game.utils.UserPreferences
 import com.pianokids.game.utils.components.AnimatedOceanWithIslands
 import com.pianokids.game.utils.components.AIAvatarPreviewDialog
 import com.pianokids.game.utils.components.AvatarCreationDialog
+import com.pianokids.game.utils.components.SettingsDialog
 import com.pianokids.game.viewmodel.AuthViewModel
 import com.pianokids.game.viewmodel.AvatarViewModel
 import kotlinx.coroutines.delay
@@ -108,6 +122,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 
@@ -137,6 +154,8 @@ fun WelcomeScreen(
     val isGeneratingAI by avatarViewModel.isGeneratingAI.collectAsState()
     val aiGenerationResponse by avatarViewModel.aiGenerationResponse.collectAsState()
 
+    var showIntro by remember { mutableStateOf(!userPrefs.getSeenWelcome()) }
+
     var showSettings by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
@@ -146,6 +165,8 @@ fun WelcomeScreen(
     var backendAvatarImageUrl by remember { mutableStateOf(activeKidProfile?.backendAvatarImageUrl) }
     var awaitingBackendAvatar by remember { mutableStateOf(false) }
     var isSavingAvatar by remember { mutableStateOf(false) }
+    var hasAutoNavigated by remember { mutableStateOf(false) }
+    var hasAutoLoginAttempted by remember { mutableStateOf(false) }
     var showCreateAvatarDialog by remember { mutableStateOf(false) }
     var showAIPreviewDialog by remember { mutableStateOf(false) }
     var pendingAIAvatar by remember { mutableStateOf<AvatarGenerationResponse?>(null) }
@@ -181,9 +202,8 @@ fun WelcomeScreen(
         socialLoginManager.handleGoogleSignInResult(task)
     }
 
-    DisposableEffect(Unit) {
+    LaunchedEffect(Unit) {
         SoundManager.startBackgroundMusic()
-        onDispose { }
     }
 
     LaunchedEffect(isLoggedIn) {
@@ -208,8 +228,22 @@ fun WelcomeScreen(
 
     LaunchedEffect(avatarError) {
         avatarError?.let { error ->
+            val isNotFound = error.contains("404", ignoreCase = true) || error.contains("not found", ignoreCase = true)
             awaitingBackendAvatar = false
             isSavingAvatar = false
+            if (isNotFound) {
+                backendAvatarId = null
+                backendAvatarName = null
+                backendAvatarImageUrl = null
+                activeKidProfile = activeKidProfile?.copy(
+                    backendAvatarId = null,
+                    backendAvatarName = null,
+                    backendAvatarImageUrl = null
+                )
+                selectedAvatar = avatarPalette.first()
+                avatarViewModel.clearError()
+                return@LaunchedEffect
+            }
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
             avatarViewModel.clearError()
         }
@@ -238,6 +272,58 @@ fun WelcomeScreen(
             awaitingBackendAvatar = false
             isSavingAvatar = false
             Toast.makeText(context, "Avatar saved!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun loginExistingProfile(profile: KidProfile, autoNavigateToHome: Boolean = false) {
+        val aliasEmail = uniqueNameLoginManager.buildKidEmail(profile.uniqueName)
+        isLoading = true
+        scope.launch {
+            try {
+                val result = authRepository.loginWithDevUser(
+                    email = aliasEmail,
+                    name = profile.displayName
+                )
+
+                result.onSuccess {
+                    uniqueNameLoginManager.saveProfile(userPrefs, profile)
+                    userPrefs.saveFullName(profile.displayName)
+                    userPrefs.clearGuestMode()
+                    userPrefs.setSeenWelcome(true)
+                    authViewModel.onLoginSuccess()
+                    avatarViewModel.loadActiveAvatar()
+                    activeKidProfile = profile
+                    currentStep = OnboardingStep.Greeting
+                    returningError = null
+                    profileError = null
+                    Toast.makeText(context, "Welcome ${profile.displayName}!", Toast.LENGTH_SHORT).show()
+                    if (autoNavigateToHome) {
+                        delay(150)
+                        hasAutoNavigated = true
+                        onNavigateToHome()
+                    }
+                }.onFailure { error ->
+                    returningError = error.message ?: "We can't locate that profile."
+                    Toast.makeText(context, returningError, Toast.LENGTH_LONG).show()
+                }
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(activeKidProfile?.uniqueName, isLoggedIn) {
+        val profile = activeKidProfile ?: return@LaunchedEffect
+
+        if (!isLoggedIn && !hasAutoLoginAttempted) {
+            hasAutoLoginAttempted = true
+            loginExistingProfile(profile, autoNavigateToHome = true)
+            return@LaunchedEffect
+        }
+
+        if (isLoggedIn && userPrefs.getSeenWelcome() && !hasAutoNavigated) {
+            hasAutoNavigated = true
+            onNavigateToHome()
         }
     }
 
@@ -286,6 +372,7 @@ fun WelcomeScreen(
             uniqueNameLoginManager.saveProfile(userPrefs, profile)
             userPrefs.saveFullName(profile.displayName)
             userPrefs.clearGuestMode()
+            userPrefs.setSeenWelcome(true)
             activeKidProfile = profile
             currentStep = OnboardingStep.Greeting
             profileError = null
@@ -308,6 +395,7 @@ fun WelcomeScreen(
                     uniqueNameLoginManager.saveProfile(userPrefs, profile)
                     userPrefs.saveFullName(profile.displayName)
                     userPrefs.clearGuestMode()
+                    userPrefs.setSeenWelcome(true)
                     authViewModel.onLoginSuccess()
                     avatarViewModel.loadActiveAvatar()
                     activeKidProfile = profile
@@ -328,65 +416,29 @@ fun WelcomeScreen(
     fun ensureProfileThenLaunchAvatar() {
         if (!isLoggedIn || activeKidProfile == null) {
             val profile = buildKidProfileOrNull() ?: return
-            persistKidProfile(profile) {
-                showCreateAvatarDialog = true
-            }
-        } else {
-            showCreateAvatarDialog = true
+            persistKidProfile(profile) { showCreateAvatarDialog = true }
+            return
         }
-    }
-
-    fun loginExistingProfile(profile: KidProfile) {
-        val aliasEmail = uniqueNameLoginManager.buildKidEmail(profile.uniqueName)
-        isLoading = true
-        scope.launch {
-            try {
-                val result = authRepository.loginWithDevUser(
-                    email = aliasEmail,
-                    name = profile.displayName
-                )
-
-                result.onSuccess {
-                    uniqueNameLoginManager.saveProfile(userPrefs, profile)
-                    userPrefs.saveFullName(profile.displayName)
-                    userPrefs.clearGuestMode()
-                    authViewModel.onLoginSuccess()
-                    avatarViewModel.loadActiveAvatar()
-                    activeKidProfile = profile
-                    currentStep = OnboardingStep.Greeting
-                    returningError = null
-                    profileError = null
-                    Toast.makeText(context, "Welcome ${profile.displayName}!", Toast.LENGTH_SHORT).show()
-                }.onFailure { error ->
-                    returningError = error.message ?: "We can't locate that profile."
-                    Toast.makeText(context, returningError, Toast.LENGTH_LONG).show()
-                }
-            } finally {
-                isLoading = false
-            }
-        }
+        showCreateAvatarDialog = true
     }
 
     val scrollState = rememberScrollState()
 
+    if (showIntro) {
+        FirstRunOnboarding {
+            userPrefs.setSeenWelcome(true)
+            showIntro = false
+        }
+        return
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(SkyBlue, OceanLight, OceanDeep)))
+            .background(Brush.verticalGradient(listOf(OceanDeep, OceanLight)))
     ) {
         AnimatedOceanWithIslands()
         WelcomeLogoTopLeft()
-
-        if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.4f)),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = RainbowYellow)
-            }
-        }
 
         Column(
             modifier = Modifier
@@ -486,11 +538,22 @@ fun WelcomeScreen(
                     }
                     val storedProfile = uniqueNameLoginManager.getStoredProfile(normalized)
                         ?: userPrefs.getKidProfile()?.takeIf { it.uniqueName.equals(normalized, true) }
-                    if (storedProfile == null) {
-                        returningError = "We can't find that name. Make a new profile."
-                        return@KidWelcomeCard
+
+                    val fallbackProfile = storedProfile ?: run {
+                        val defaultAvatar = avatarPalette.first()
+                        KidProfile(
+                            uniqueName = normalized,
+                            displayName = normalized.replaceFirstChar { it.uppercase() },
+                            age = 8,
+                            avatarEmoji = defaultAvatar.emoji,
+                            avatarColorHex = defaultAvatar.color.toHexString(),
+                            backendAvatarId = null,
+                            backendAvatarName = null,
+                            backendAvatarImageUrl = null
+                        )
                     }
-                    loginExistingProfile(storedProfile)
+
+                    loginExistingProfile(fallbackProfile, autoNavigateToHome = true)
                 },
                 returningError = returningError,
                 onBackToChoice = {
@@ -564,6 +627,8 @@ fun WelcomeScreen(
                     isSavingAvatar = false
                     pendingAIAvatar = null
                     showAIPreviewDialog = false
+                    hasAutoNavigated = false
+                    hasAutoLoginAttempted = false
                     currentStep = OnboardingStep.AccountChoice
                 }
             )
@@ -587,101 +652,112 @@ fun WelcomeScreen(
             )
         }
 
-        if (showSettings) {
-            SettingsDialog(onDismiss = { showSettings = false })
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = RainbowYellow)
+            }
         }
+    }
 
-        if (showAvatarPicker) {
-            AvatarPickerDialog(
-                options = avatarPalette,
-                onDismiss = { showAvatarPicker = false },
-                onSelect = {
-                    selectedAvatar = it
-                    showAvatarPicker = false
-                }
-            )
-        }
+    if (showSettings) {
+        SettingsDialog(onDismiss = { showSettings = false })
+    }
 
-        if (showCreateAvatarDialog) {
-            AvatarCreationDialog(
-                onDismiss = { showCreateAvatarDialog = false },
-                onCreateAvatar = { name, avatarImageUrl ->
-                    showCreateAvatarDialog = false
+    if (showAvatarPicker) {
+        AvatarPickerDialog(
+            options = avatarPalette,
+            onDismiss = { showAvatarPicker = false },
+            onSelect = {
+                selectedAvatar = it
+                showAvatarPicker = false
+            }
+        )
+    }
+
+    if (showCreateAvatarDialog) {
+        AvatarCreationDialog(
+            onDismiss = { showCreateAvatarDialog = false },
+            onCreateAvatar = { name, avatarImageUrl ->
+                showCreateAvatarDialog = false
+                awaitingBackendAvatar = true
+                isSavingAvatar = true
+                avatarViewModel.createAvatar(name, avatarImageUrl)
+            },
+            onCreateAvatarWithAI = { name, prompt, style ->
+                showCreateAvatarDialog = false
+                pendingAIAvatarName = name
+                pendingPrompt = prompt
+                pendingStyle = style
+                avatarViewModel.generateAvatarFromPrompt(prompt, name, style)
+            }
+        )
+    }
+
+    if (showAIPreviewDialog && pendingAIAvatar != null) {
+        AIAvatarPreviewDialog(
+            avatarName = pendingAIAvatarName.ifBlank { kidName.ifBlank { uniqueName.ifBlank { "Avatar" } } },
+            generationResponse = pendingAIAvatar!!,
+            onSave = {
+                pendingAIAvatar?.previewData?.let {
                     awaitingBackendAvatar = true
                     isSavingAvatar = true
-                    avatarViewModel.createAvatar(name, avatarImageUrl)
-                },
-                onCreateAvatarWithAI = { name, prompt, style ->
-                    showCreateAvatarDialog = false
-                    pendingAIAvatarName = name
-                    pendingPrompt = prompt
-                    pendingStyle = style
-                    avatarViewModel.generateAvatarFromPrompt(prompt, name, style)
+                    avatarViewModel.saveAIAvatar(it)
                 }
-            )
-        }
+                showAIPreviewDialog = false
+                pendingAIAvatar = null
+            },
+            onRegenerate = {
+                showAIPreviewDialog = false
+                pendingAIAvatar = null
+                avatarViewModel.generateAvatarFromPrompt(pendingPrompt, pendingAIAvatarName, pendingStyle)
+            },
+            onDismiss = {
+                showAIPreviewDialog = false
+                pendingAIAvatar = null
+            },
+            isSaving = isSavingAvatar
+        )
+    }
 
-        if (showAIPreviewDialog && pendingAIAvatar != null) {
-            AIAvatarPreviewDialog(
-                avatarName = pendingAIAvatarName.ifBlank { kidName.ifBlank { uniqueName.ifBlank { "Avatar" } } },
-                generationResponse = pendingAIAvatar!!,
-                onSave = {
-                    pendingAIAvatar?.previewData?.let {
-                        awaitingBackendAvatar = true
-                        isSavingAvatar = true
-                        avatarViewModel.saveAIAvatar(it)
-                    }
-                    showAIPreviewDialog = false
-                    pendingAIAvatar = null
-                },
-                onRegenerate = {
-                    showAIPreviewDialog = false
-                    pendingAIAvatar = null
-                    avatarViewModel.generateAvatarFromPrompt(pendingPrompt, pendingAIAvatarName, pendingStyle)
-                },
-                onDismiss = {
-                    showAIPreviewDialog = false
-                    pendingAIAvatar = null
-                },
-                isSaving = isSavingAvatar
-            )
-        }
-
-        if (isGeneratingAI) {
-            AlertDialog(
-                onDismissRequest = { },
-                title = {
-                    Text(
-                        text = "Building your AI avatar",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+    if (isGeneratingAI) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = {
+                Text(
+                    text = "Building your AI avatar",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .size(56.dp),
+                        color = Color(0xFF667EEA),
+                        strokeWidth = 5.dp
                     )
-                },
-                text = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .size(56.dp),
-                            color = Color(0xFF667EEA),
-                            strokeWidth = 5.dp
-                        )
-                        Text(
-                            text = "We are painting your magical avatar...",
-                            style = MaterialTheme.typography.bodyLarge,
-                            textAlign = TextAlign.Center
-                        )
-                        Text(
-                            text = "It usually takes 10-30 seconds",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.8f),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                },
-                confirmButton = {}
-            )
-        }
+                    Text(
+                        text = "We are painting your magical avatar...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "It usually takes 10-30 seconds",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.8f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            },
+            confirmButton = {}
+        )
     }
 }
 
@@ -853,16 +929,26 @@ private fun UniqueNameStep(
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center
         )
-        OutlinedTextField(
-            value = uniqueName,
-            onValueChange = onUniqueNameChange,
-            placeholder = { Text("Magic name") },
-            singleLine = true,
-            isError = errorMessage != null,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp)
-        )
+        Card(
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            OutlinedTextField(
+                value = uniqueName,
+                onValueChange = onUniqueNameChange,
+                placeholder = { Text("Magic name") },
+                singleLine = true,
+                isError = errorMessage != null,
+                leadingIcon = { Icon(Icons.Default.Face, contentDescription = null, tint = Color(0xFFFFC857)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(22.dp)),
+                shape = RoundedCornerShape(22.dp)
+            )
+        }
         if (errorMessage != null) {
             Text(
                 text = errorMessage,
@@ -962,15 +1048,25 @@ private fun ReturningLoginStep(
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center
         )
-        OutlinedTextField(
-            value = uniqueName,
-            onValueChange = onUniqueNameChange,
-            placeholder = { Text("Magic name") },
-            singleLine = true,
-            isError = errorMessage != null,
-            shape = RoundedCornerShape(18.dp),
+        Card(
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
             modifier = Modifier.fillMaxWidth()
-        )
+        ) {
+            OutlinedTextField(
+                value = uniqueName,
+                onValueChange = onUniqueNameChange,
+                placeholder = { Text("Magic name") },
+                singleLine = true,
+                isError = errorMessage != null,
+                leadingIcon = { Icon(Icons.Default.Face, contentDescription = null, tint = Color(0xFF67E8F9)) },
+                shape = RoundedCornerShape(22.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(22.dp))
+            )
+        }
         if (errorMessage != null) {
             Text(
                 text = errorMessage,
@@ -1216,6 +1312,330 @@ private fun KidStepIndicator(currentStep: OnboardingStep) {
     }
 }
 
+private data class OnboardingSlide(
+    val title: String,
+    val subtitle: String,
+    val footer: String,
+    val emoji: String,
+    val accent: Color,
+    val gradient: List<Color>,
+    val imageRes: Int,
+    val themeTag: String
+)
+
+@Composable
+private fun FirstRunOnboarding(onDone: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val slides = listOf(
+        OnboardingSlide(
+            title = "Welcome to Melody Island!",
+            subtitle = "Play with our mascot and start your musical adventure.",
+            footer = "Rainbow keys, fluffy clouds, and endless music magic.",
+            emoji = "🎹",
+            accent = Color(0xFF6A5AE0),
+            gradient = listOf(Color(0xFFB3E5FC), Color(0xFFFFF1F3)),
+            imageRes = R.drawable.cat_logo,
+            themeTag = "Rainbow Keys"
+        ),
+        OnboardingSlide(
+            title = "Play Songs You Love",
+            subtitle = "Cartoons, heroes, and favorite tunes are ready to learn!",
+            footer = "Pick a cape, put on headphones, and tap the beat.",
+            emoji = "🎧",
+            accent = Color(0xFFFF8A65),
+            gradient = listOf(Color(0xFFE1BEE7), Color(0xFFFFE0B2)),
+            imageRes = R.drawable.spiderman,
+            themeTag = "Hero Beats"
+        ),
+        OnboardingSlide(
+            title = "Become a Piano Star",
+            subtitle = "Collect trophies, level up, and surprise your family!",
+            footer = "Shiny coins, sparkling badges, and big spotlights await.",
+            emoji = "🏆",
+            accent = Color(0xFFFFC107),
+            gradient = listOf(Color(0xFFB2EBF2), Color(0xFFFFF9C4)),
+            imageRes = R.drawable.batman,
+            themeTag = "Star Stage"
+        )
+    )
+
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { slides.size })
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(Color(0xFFB3E5FC), Color(0xFFFDF5FF)),
+                    center = Offset(0.35f, 0.45f),
+                    radius = 1400f
+                )
+            )
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+    ) {
+        OnboardingFloaters()
+        // floating hero stickers for playful background
+        Image(
+            painter = painterResource(R.drawable.batman),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(140.dp)
+                .padding(8.dp)
+                .graphicsLayer(alpha = 0.16f, rotationZ = 8f),
+            contentScale = ContentScale.Fit
+        )
+        Image(
+            painter = painterResource(R.drawable.spiderman),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .size(160.dp)
+                .padding(12.dp)
+                .graphicsLayer(alpha = 0.16f, rotationZ = -6f),
+            contentScale = ContentScale.Fit
+        )
+        Image(
+            painter = painterResource(R.drawable.ironman),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .size(120.dp)
+                .padding(8.dp)
+                .graphicsLayer(alpha = 0.12f, rotationZ = 4f),
+            contentScale = ContentScale.Fit
+        )
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TextButton(onClick = onDone) {
+                    Text("Skip", color = Color(0xFF1B2559), fontWeight = FontWeight.Bold)
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    slides.indices.forEach { index ->
+                        val isActive = pagerState.currentPage == index
+                        Box(
+                            modifier = Modifier
+                                .width(if (isActive) 20.dp else 10.dp)
+                                .height(10.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(if (isActive) slides[index].accent else Color.White.copy(alpha = 0.6f))
+                        )
+                    }
+                }
+                Button(
+                    onClick = {
+                        if (pagerState.currentPage < slides.lastIndex) {
+                            scope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) }
+                        } else {
+                            onDone()
+                        }
+                    },
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A5AE0)),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                ) {
+                    Text(if (pagerState.currentPage == slides.lastIndex) "Let’s play!" else "Next", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
+                val slide = slides[page]
+                if (isLandscape) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OnboardingSlideCard(slide, modifier = Modifier.weight(1f))
+                        OnboardingIllustration(slide, modifier = Modifier.weight(1f))
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        OnboardingIllustration(slide, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(12.dp))
+                        OnboardingSlideCard(slide, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun OnboardingSlideCard(slide: OnboardingSlide, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .padding(vertical = 12.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+    ) {
+        Box(
+            modifier = Modifier
+                .background(Brush.verticalGradient(slide.gradient))
+                .padding(24.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(slide.themeTag, color = Color.White) },
+                        leadingIcon = { Text(slide.emoji) },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = slide.accent.copy(alpha = 0.3f))
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = slide.accent.copy(alpha = 0.9f)
+                    )
+                }
+
+                Text(
+                    text = slide.title,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF1B2559)
+                    ),
+                    textAlign = TextAlign.Start
+                )
+                Text(
+                    text = slide.subtitle,
+                    style = MaterialTheme.typography.bodyLarge.copy(color = Color(0xFF2F3A6A)),
+                    textAlign = TextAlign.Start
+                )
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = slide.accent.copy(alpha = 0.14f)),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(slide.emoji, fontSize = 22.sp)
+                        Column {
+                            Text(
+                                text = slide.footer,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = Color(0xFF1B2559),
+                                    fontStyle = FontStyle.Italic
+                                )
+                            )
+                            Text(
+                                text = "Play • Learn • Shine",
+                                style = MaterialTheme.typography.labelLarge.copy(color = Color(0xFF1B2559))
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OnboardingIllustration(slide: OnboardingSlide, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .padding(vertical = 12.dp),
+        shape = RoundedCornerShape(32.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.35f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(slide.gradient)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = slide.imageRes),
+                contentDescription = "Onboarding art",
+                modifier = Modifier
+                    .padding(18.dp)
+                    .sizeIn(maxWidth = 420.dp, maxHeight = 320.dp)
+                    .graphicsLayer(alpha = 0.9f, translationY = rememberFloatyOffset(slide.themeTag)),
+                contentScale = ContentScale.Fit
+            )
+        }
+    }
+}
+
+@Composable
+private fun rememberFloatyOffset(key: String): Float {
+    val transition = rememberInfiniteTransition(label = "float-$key")
+    return transition.animateFloat(
+        initialValue = -8f,
+        targetValue = 8f,
+        animationSpec = infiniteRepeatable(animation = tween(2200, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "floatAnim-$key"
+    ).value
+}
+
+@Composable
+private fun OnboardingFloaters() {
+    val transition = rememberInfiniteTransition(label = "floaters")
+    val offsets = listOf(0.1f to 0.2f, 0.3f to 0.7f, 0.75f to 0.4f, 0.55f to 0.15f)
+    val drift = transition.animateFloat(
+        initialValue = -10f,
+        targetValue = 10f,
+        animationSpec = infiniteRepeatable(animation = tween(2600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "drift"
+    )
+    offsets.forEachIndexed { idx, (x, y) ->
+        val scaleAnim = transition.animateFloat(
+            initialValue = 0.85f,
+            targetValue = 1.05f,
+            animationSpec = infiniteRepeatable(animation = tween(1800 + idx * 120, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+            label = "scale-$idx"
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(0.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = null,
+                tint = Color(0xFFFFF59D).copy(alpha = 0.35f),
+                modifier = Modifier
+                    .offset(x = (x * 300f + drift.value).dp, y = (y * 400f + drift.value).dp)
+                    .size((28 * scaleAnim.value).dp)
+                    .alpha(0.8f)
+            )
+        }
+    }
+}
+
 @Composable
 private fun KidPrimaryButton(
     text: String,
@@ -1391,6 +1811,7 @@ private fun WelcomeLogoTopLeft() {
             val videoItem = MediaItem.fromUri("android.resource://${context.packageName}/raw/cat_logo_animation")
             setMediaItem(videoItem)
             repeatMode = ExoPlayer.REPEAT_MODE_ALL     // loop forever
+            volume = 0f // mute intro video sound
             prepare()
             playWhenReady = true
         }
