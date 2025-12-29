@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    private const val BASE_URL = "http://192.168.1.103:3000/"
+    private const val BASE_URL = "http://10.0.2.2:3000/"
 
     private val logging = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
@@ -55,5 +55,9 @@ object RetrofitClient {
 
     val musicApi: MusicApiService by lazy {
         retrofit.create(MusicApiService::class.java)
+    }
+
+    val playHistoryApi: PlayHistoryApi by lazy {
+        retrofit.create(PlayHistoryApi::class.java)
     }
 }

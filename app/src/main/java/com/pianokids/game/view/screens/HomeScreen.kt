@@ -10,9 +10,12 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
@@ -22,6 +25,8 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,9 +43,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.*
 import androidx.compose.ui.unit.fontscaling.MathUtils.lerp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import coil.decode.GifDecoder
@@ -54,22 +61,30 @@ import com.pianokids.game.data.models.getEffectivePosition
 import com.pianokids.game.data.models.KidProfile
 import com.pianokids.game.data.models.Avatar
 import com.pianokids.game.data.models.AvatarCustomization
+import com.pianokids.game.data.models.LevelHistoryEntry
 import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.data.repository.AuthRepository
 import com.pianokids.game.data.repository.SublevelProgressRepository
 import com.pianokids.game.data.repository.SublevelRepository
+import com.pianokids.game.data.repository.LevelHistoryRepository
 import com.pianokids.game.ui.theme.*
 import com.pianokids.game.utils.ImageMapper
 import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.utils.UserPreferences
+import com.pianokids.game.utils.PianoSoundManager
 import com.pianokids.game.viewmodel.AuthViewModel
 import com.pianokids.game.viewmodel.AvatarViewModel
 import com.pianokids.game.utils.components.AvatarCreationDialog
 import com.pianokids.game.utils.components.AIAvatarPreviewDialog
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 import kotlin.math.sin
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 // ---- Ocean Clouds Data ----
 data class Cloud(
@@ -113,6 +128,12 @@ fun HomeScreen(
     var showLoginDialog by remember { mutableStateOf(false) }
     var showCreateAvatarDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    val historyRepository = remember { LevelHistoryRepository() }
+    var showHistoryDialog by remember { mutableStateOf(false) }
+    var historyEntries by remember { mutableStateOf<List<LevelHistoryEntry>>(emptyList()) }
+    var historyLoading by remember { mutableStateOf(false) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    var selectedHistoryEntry by remember { mutableStateOf<LevelHistoryEntry?>(null) }
     var resumeAvatarFlowAfterLogin by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
@@ -180,10 +201,24 @@ fun HomeScreen(
             avatarViewModel.clearAIGenerationResponse()
         }
     }
+
     val userName by authViewModel.userName.collectAsState()
     val user = userPrefs.getUser()
 
     val userId = user?.id
+
+    LaunchedEffect(showHistoryDialog, userId) {
+        if (showHistoryDialog && !userId.isNullOrBlank()) {
+            historyLoading = true
+            historyError = null
+            val entries = historyRepository.getHistory(userId)
+            historyEntries = entries ?: emptyList()
+            if (entries == null) {
+                historyError = "Unable to load history"
+            }
+            historyLoading = false
+        }
+    }
 
     val userPhotoUrl = user?.photoUrl
 
@@ -364,6 +399,14 @@ fun HomeScreen(
                 onRecognizeClick = {
                     scope.launch { drawerState.close() }
                     onNavigateToMusic()
+                },
+                onHistoryClick = {
+                    if (!isLoggedIn || userId.isNullOrBlank()) {
+                        showLoginDialog = true
+                        return@HomeProfileDrawer
+                    }
+                    scope.launch { drawerState.close() }
+                    showHistoryDialog = true
                 },
                 onMiniGamesClick = {
                     scope.launch { drawerState.close() }
@@ -666,6 +709,7 @@ fun HomeScreen(
                                 .padding(16.dp)
                                 .size(64.dp),
                             color = Color(0xFF667EEA),
+
                             strokeWidth = 6.dp
                         )
                         Text(
@@ -692,6 +736,29 @@ fun HomeScreen(
                     }
                 },
                 confirmButton = {}
+            )
+        }
+
+        if (showHistoryDialog) {
+            LevelHistoryDialog(
+                entries = historyEntries,
+                isLoading = historyLoading,
+                errorMessage = historyError,
+                onDismissRequest = { showHistoryDialog = false },
+                onEntrySelected = {
+                    selectedHistoryEntry = it
+                    showHistoryDialog = false
+                }
+            )
+        }
+
+        selectedHistoryEntry?.let { entry ->
+            LevelHistoryPlaybackDialog(
+                entry = entry,
+                onDismiss = {
+                    PianoSoundManager.stopAllSounds()
+                    selectedHistoryEntry = null
+                }
             )
         }
 
@@ -725,6 +792,7 @@ fun HomeProfileDrawer(
     accentColor: Color,
     onProfileClick: () -> Unit,
     onRecognizeClick: () -> Unit,
+    onHistoryClick: () -> Unit,
     onMiniGamesClick: () -> Unit,
     onAddAvatarClick: () -> Unit,
     onSettingsClick: () -> Unit
@@ -814,6 +882,16 @@ fun HomeProfileDrawer(
                 ) {
                     SoundManager.playClick()
                     onRecognizeClick()
+                }
+
+                DrawerActionButton(
+                    icon = Icons.Default.History,
+                    label = "Historic",
+                    description = "Replay your latest runs",
+                    accentColor = RainbowViolet
+                ) {
+                    SoundManager.playClick()
+                    onHistoryClick()
                 }
 
                 DrawerActionButton(
@@ -917,6 +995,648 @@ private fun DrawerActionButton(
                 )
             }
         }
+    }
+}
+
+
+@Composable
+private fun LevelHistoryDialog(
+    entries: List<LevelHistoryEntry>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onDismissRequest: () -> Unit,
+    onEntrySelected: (LevelHistoryEntry) -> Unit
+) {
+    Dialog(onDismissRequest = onDismissRequest) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(16.dp)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF667EEA).copy(alpha = 0.95f),
+                            Color(0xFF764BA2).copy(alpha = 0.95f)
+                        )
+                    ),
+                    RoundedCornerShape(32.dp)
+                ),
+            shape = RoundedCornerShape(32.dp),
+            color = Color.Transparent
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Header with fun emojis
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "🎮",
+                        fontSize = 32.sp
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "My Gaming History",
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontSize = 28.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                letterSpacing = 1.sp
+                            )
+                        )
+                        Text(
+                            text = "🎵 Tap to replay your amazing performances! 🎵", 
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        )
+                    }
+                    IconButton(
+                        onClick = onDismissRequest,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close history",
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(20.dp))
+
+                when {
+                    isLoading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(240.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 4.dp,
+                                    modifier = Modifier.size(60.dp)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Loading your memories...",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                    errorMessage != null -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Color(0xFFFF8A80).copy(alpha = 0.2f),
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "⚠️",
+                                fontSize = 32.sp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = errorMessage,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                ),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    entries.isEmpty() -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Color.White.copy(alpha = 0.1f),
+                                    RoundedCornerShape(20.dp)
+                                )
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "🎼",
+                                fontSize = 48.sp,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            Text(
+                                text = "No memories yet!",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Play a level to start recording your performances!",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    fontSize = 13.sp
+                                ),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 380.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            items(entries.size) { index ->
+                                val entry = entries[index]
+                                val starEmoji = when (entry.stars) {
+                                    3 -> "⭐⭐⭐"
+                                    2 -> "⭐⭐"
+                                    1 -> "⭐"
+                                    else -> "✨"
+                                }
+                                
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(
+                                            Brush.linearGradient(
+                                                colors = listOf(
+                                                    Color.White.copy(alpha = 0.15f),
+                                                    Color.White.copy(alpha = 0.08f)
+                                                )
+                                            ),
+                                            RoundedCornerShape(20.dp)
+                                        )
+                                        .clickable { onEntrySelected(entry) }
+                                        .border(
+                                            width = 2.dp,
+                                            color = Color.White.copy(alpha = 0.3f),
+                                            shape = RoundedCornerShape(20.dp)
+                                        ),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = Color.Transparent
+                                    ),
+                                    elevation = CardDefaults.cardElevation(
+                                        defaultElevation = 0.dp
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(18.dp)
+                                    ) {
+                                        // Title with emoji
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "🎹 ${entry.levelTitle}",
+                                                    style = MaterialTheme.typography.titleMedium.copy(
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 16.sp,
+                                                        color = Color.White
+                                                    ),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = entry.sublevelTitle ?: "Challenge",
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        color = Color.White.copy(alpha = 0.75f),
+                                                        fontSize = 12.sp
+                                                    )
+                                                )
+                                            }
+                                            Text(
+                                                text = starEmoji,
+                                                fontSize = 20.sp
+                                            )
+                                        }
+                                        
+                                        Divider(
+                                            color = Color.White.copy(alpha = 0.2f),
+                                            thickness = 1.dp,
+                                            modifier = Modifier.padding(vertical = 10.dp)
+                                        )
+                                        
+                                        // Stats row with icons
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            // Duration
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(text = "⏱️", fontSize = 14.sp)
+                                                Text(
+                                                    text = formatDurationMs(entry.durationMs),
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        color = Color.White.copy(alpha = 0.9f),
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        fontSize = 12.sp
+                                                    )
+                                                )
+                                            }
+                                            
+                                            // Mistakes
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(text = "🎯", fontSize = 14.sp)
+                                                Text(
+                                                    text = "${entry.wrongNotes} oops${if (entry.wrongNotes != 1) "es" else ""}",
+                                                    style = MaterialTheme.typography.bodySmall.copy(
+                                                        color = Color.White.copy(alpha = 0.9f),
+                                                        fontWeight = FontWeight.Medium,
+                                                        fontSize = 12.sp
+                                                    )
+                                                )
+                                            }
+                                            
+                                            Spacer(modifier = Modifier.weight(1f))
+                                            
+                                            // Date
+                                            Text(
+                                                text = "📅 ${formatHistoryTimestamp(entry.createdAt)}",
+                                                style = MaterialTheme.typography.labelSmall.copy(
+                                                    color = Color.White.copy(alpha = 0.65f),
+                                                    fontSize = 11.sp
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = "👆 Tap a session to replay and hear your awesome performance!",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LevelHistoryPlaybackDialog(
+    entry: LevelHistoryEntry,
+    onDismiss: () -> Unit
+) {
+    val playbackScope = rememberCoroutineScope()
+    var isPlaying by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .padding(16.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = Color.Transparent
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF764BA2).copy(alpha = 0.95f),
+                                Color(0xFF667EEA).copy(alpha = 0.95f)
+                            )
+                        ),
+                        RoundedCornerShape(28.dp)
+                    )
+                    .padding(28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Close button (top right)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close playback",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+                
+                // Title Section
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Color.White.copy(alpha = 0.1f),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "🎬 Ready to watch your performance! 🎬",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "🎹 ${entry.levelTitle}",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 24.sp,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = entry.sublevelTitle ?: "Amazing Challenge",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 13.sp
+                        )
+                    )
+                }
+
+                // Stats Cards
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Duration card
+                    StatsCard(
+                        emoji = "⏱️",
+                        label = "Time",
+                        value = formatDurationMs(entry.durationMs)
+                    )
+                    
+                    // Stars card
+                    StatsCard(
+                        emoji = "⭐",
+                        label = "Score",
+                        value = "${entry.stars} Star${if (entry.stars != 1) "s" else ""}"
+                    )
+                    
+                    // Mistakes card
+                    StatsCard(
+                        emoji = "🎯",
+                        label = "Oops",
+                        value = "${entry.wrongNotes} time${if (entry.wrongNotes != 1) "s" else ""}"
+                    )
+                }
+
+                // Notes info
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Color(0xFFFFD700).copy(alpha = 0.15f),
+                            RoundedCornerShape(16.dp)
+                        )
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "🎵",
+                        fontSize = 24.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Text(
+                        text = "Recorded ${entry.notes.size} amazing note${if (entry.notes.size != 1) "s" else ""}!",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                // Play Button
+                Button(
+                    onClick = {
+                        if (isPlaying || entry.notes.isEmpty()) return@Button
+                        playbackScope.launch {
+                            isPlaying = true
+                            entry.notes.forEachIndexed { index, note ->
+                                val playbackNote = resolvePlaybackNoteName(note)
+                                playbackNote?.let { PianoSoundManager.playNote(it) }
+                                val delayMs = entry.noteDurations.getOrNull(index)
+                                    ?.times(1000f)?.toLong()?.coerceIn(120L, 2500L)
+                                    ?: 400L
+                                delay(delayMs)
+                            }
+                            isPlaying = false
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4CAF50),
+                        disabledContainerColor = Color(0xFF4CAF50).copy(alpha = 0.6f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    enabled = entry.notes.isNotEmpty() && !isPlaying
+                ) {
+                    if (isPlaying) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "🎵 Now Playing...",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    } else {
+                        Text(
+                            "▶️ Play My Recording",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                // Info text
+                Text(
+                    text = "Close the dialog to stop playback",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 11.sp
+                    ),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RowScope.StatsCard(
+    emoji: String,
+    label: String,
+    value: String
+) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .background(
+                Color.White.copy(alpha = 0.12f),
+                RoundedCornerShape(16.dp)
+            )
+            .border(
+                width = 1.5.dp,
+                color = Color.White.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = emoji,
+            fontSize = 24.sp,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Medium
+            )
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelMedium.copy(
+                color = Color.White,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            ),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+private val historyDisplayFormatter = SimpleDateFormat("MMM d • HH:mm", Locale.getDefault())
+private val historyIsoParsers = listOf(
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US),
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US),
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US),
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+).onEach {
+    it.timeZone = TimeZone.getTimeZone("UTC")
+}
+
+private fun formatHistoryTimestamp(raw: String): String {
+    val parsed = historyIsoParsers.asSequence().mapNotNull { parser ->
+        try {
+            parser.parse(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }.firstOrNull()
+
+    return if (parsed != null) {
+        historyDisplayFormatter.format(parsed)
+    } else raw
+}
+
+private fun formatDurationMs(durationMs: Long): String {
+    val totalSeconds = (durationMs / 1000).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
+}
+
+private fun resolvePlaybackNoteName(note: String): String? {
+    return when (note.lowercase()) {
+        "do" -> "Do"
+        "re" -> "Ré"
+        "mi" -> "Mi"
+        "fa" -> "Fa"
+        "sol" -> "Sol"
+        "la" -> "La"
+        "si" -> "Si"
+        "do#", "reb" -> "Do#"
+        "re#", "mib" -> "Ré#"
+        "fa#", "solb" -> "Fa#"
+        "sol#", "lab" -> "Sol#"
+        "la#", "sib" -> "La#"
+        "dob", "si#" -> "Si"
+        "fab" -> "Mi"
+        else -> note.replaceFirstChar { it.uppercaseChar() }
     }
 }
 

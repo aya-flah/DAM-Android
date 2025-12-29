@@ -4,8 +4,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pianokids.game.data.models.Level
+import com.pianokids.game.data.models.PlayHistoryRequest
 import com.pianokids.game.data.models.Sublevel
 import com.pianokids.game.data.models.SublevelProgressRequest
+import com.pianokids.game.data.repository.LevelHistoryRepository
 import com.pianokids.game.data.repository.LevelRepository
 import com.pianokids.game.data.repository.SublevelProgressRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,11 +45,18 @@ class LevelViewModel : ViewModel() {
     private var lastPlayedNormalized: String? = null
     private var wrongStreak: Int = 0
     private var lastCorrectTimeMs: Long = 0
+    private val historyRepository = LevelHistoryRepository()
+    private val playedNotes = mutableListOf<String>()
+    private val playedDurations = mutableListOf<Float>()
+    private var historySessionStart = 0L
+    private var lastNoteTimestamp = 0L
+    private var historySaved = false
 
     /**
      * Load a single level by its backend id
      */
     fun loadLevel(levelId: String) {
+        resetHistoryTracking()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
 
@@ -120,6 +129,10 @@ class LevelViewModel : ViewModel() {
 
         val expected = normalize(expectedNotes[index])
         val played = normalize(note)
+
+        if (played.isNotBlank()) {
+            recordNoteForHistory(played)
+        }
 
         Log.d("LevelViewModel", "Played='$played' Expected='$expected'")
 
@@ -223,6 +236,7 @@ class LevelViewModel : ViewModel() {
     }
 
     fun selectSublevel(sublevel: Sublevel) {
+        resetHistoryTracking()
         expectedNotes = sublevel.notes
         noteDurations = List(sublevel.notes.size) { 1f }
 
@@ -275,11 +289,67 @@ class LevelViewModel : ViewModel() {
                     selectedSublevel = updatedSubs.firstOrNull { it._id == sublevel._id }
                 )
             }
+
+            if (level != null && sublevel != null) {
+                submitHistoryIfNeeded(userId, level, sublevel, stars, wrongs)
+            }
         }
     }
 
     fun clearWrongAnimation() {
         _uiState.value = _uiState.value.copy(showWrongAnimation = false)
+    }
+
+    private fun resetHistoryTracking() {
+        playedNotes.clear()
+        playedDurations.clear()
+        lastNoteTimestamp = 0L
+        historySessionStart = 0L
+        historySaved = false
+    }
+
+    private fun recordNoteForHistory(note: String) {
+        if (note.isBlank()) return
+        val now = System.currentTimeMillis()
+        val duration = if (lastNoteTimestamp == 0L) 500L else (now - lastNoteTimestamp).coerceIn(120L, 2500L)
+        playedNotes.add(note)
+        playedDurations.add(duration / 1000f)
+        lastNoteTimestamp = now
+        if (historySessionStart == 0L) {
+            historySessionStart = now
+        }
+    }
+
+    private suspend fun submitHistoryIfNeeded(
+        userId: String,
+        level: Level,
+        sublevel: Sublevel,
+        stars: Int,
+        wrongNotes: Int
+    ) {
+        if (historySaved || playedNotes.isEmpty()) return
+        val durationMs = if (historySessionStart > 0L) {
+            System.currentTimeMillis() - historySessionStart
+        } else {
+            0L
+        }
+
+        val sanitizedDurations = playedDurations.map { it.coerceAtLeast(0.1f) }
+
+        val historyRequest = PlayHistoryRequest(
+            userId = userId,
+            levelId = level._id,
+            sublevelId = sublevel._id,
+            notes = playedNotes.toList(),
+            noteDurations = sanitizedDurations,
+            durationMs = durationMs,
+            stars = stars,
+            completed = true,
+            wrongNotes = wrongNotes
+        )
+
+        historyRepository.saveHistory(historyRequest)
+        historySaved = true
     }
 
     private fun adjustLevelIfNeeded(level: Level): Level = level

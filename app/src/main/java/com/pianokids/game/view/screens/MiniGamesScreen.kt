@@ -537,8 +537,7 @@ private fun FindTheNoteGame(onBack: () -> Unit) {
                 }
             }
         }
-
-        Spacer(Modifier.height(16.dp))
+Spacer(Modifier.height(16.dp))
 
         // Piano-like keys
         Text(
