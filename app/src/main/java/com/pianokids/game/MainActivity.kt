@@ -19,8 +19,10 @@ import com.facebook.FacebookSdk
 import com.pianokids.game.view.screens.HomeScreen
 import com.pianokids.game.view.screens.ProfileScreen
 import com.pianokids.game.view.screens.WelcomeScreen
+import com.pianokids.game.view.screens.PracticeScreen
 import com.pianokids.game.view.screens.MiniGamesScreen
 import com.pianokids.game.view.screens.MusicRecognitionScreen
+import com.pianokids.game.view.screens.MainMenuScreen
 import com.pianokids.game.ui.theme.PianoKidsGameTheme
 import com.pianokids.game.utils.SocialLoginManager
 import com.pianokids.game.utils.SoundManager
@@ -127,16 +129,16 @@ class MainActivity : ComponentActivity() {
                                 // User has valid auth token
                                 Log.d("MainActivity", "Navigation: Going to home (logged in)")
                                 userPrefs.clearGuestMode()
-                                "home"
+                                "menu"
                             }
                             hasKidProfile -> {
                                 Log.d("MainActivity", "Navigation: Going to home (kid profile)")
-                                "home"
+                                "menu"
                             }
                             isGuest -> {
                                 // User is in guest mode
                                 Log.d("MainActivity", "Navigation: Going to home (guest mode)")
-                                "home"
+                                "menu"
                             }
                             else -> {
                                 // Not logged in and not guest - show welcome
@@ -158,10 +160,18 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToHome = {
                                     userPrefs.setSeenWelcome(true)
                                     userPrefs.clearGuestMode()
-                                    navController.navigate("home") {
+                                    navController.navigate("menu") {
                                         popUpTo("welcome") { inclusive = true }
                                     }
                                 }
+                            )
+                        }
+
+                        composable("menu") {
+                            MainMenuScreen(
+                                onNavigateToMap = { navController.navigate("home") },
+                                onNavigateToPractice = { navController.navigate("practice") },
+                                onNavigateToMiniGames = { navController.navigate("minigames") }
                             )
                         }
 
@@ -169,9 +179,10 @@ class MainActivity : ComponentActivity() {
                             HomeScreen(
                                 onNavigateToProfile = { navController.navigate("profile") },
                                 onNavigateToAuth = { navController.navigate("welcome") },
-                                onNavigateBack = { 
-                                    // Don't do anything - HomeScreen is a root destination
-                                    // User should use device back button to exit app
+                                onNavigateBack = {
+                                    navController.navigate("menu") {
+                                        popUpTo("map") { inclusive = true }
+                                    }
                                 },
                                 onNavigateToLevel = { levelId ->
                                     navController.navigate("level/$levelId")
@@ -180,6 +191,13 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToMiniGames = { navController.navigate("minigames") }
                             )
                         }
+
+                        composable("practice") {
+                            PracticeScreen(
+                                onExit = { navController.popBackStack() }
+                            )
+                        }
+
 
                         composable("minigames") {
                             MiniGamesScreen(

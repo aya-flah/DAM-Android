@@ -150,7 +150,8 @@ fun HomeScreen(
         scope.launch { drawerState.close() }
     }
     BackHandler(enabled = !drawerState.isOpen) {
-        activity?.finish()
+        SoundManager.playClick()
+        onNavigateBack()
     }
 
     // Snackbar and avatar states
@@ -436,8 +437,8 @@ fun HomeScreen(
                 cloudOffset = cloudOffset,
                 birdOffset = birdOffset
             )
-
-        // Loading overlay
+            
+            // Loading overlay
         if (isLoading) {
             Box(
                 modifier = Modifier
@@ -466,7 +467,8 @@ fun HomeScreen(
                     scope.launch {
                         if (drawerState.isOpen) drawerState.close() else drawerState.open()
                     }
-                }
+                },
+                onBackClick = { onNavigateBack() }
             )
 
             // ---- MAP ----
@@ -1993,7 +1995,8 @@ fun CompactGameHeader(
     maxStars: Int,
     isLoggedIn: Boolean,
     accentColor: Color,
-    onAvatarClick: () -> Unit
+    onAvatarClick: () -> Unit,
+    onBackClick: (() -> Unit)? = null
 ) {
     val displayImageUrl = avatarImageUrl ?: userPhotoUrl
     val starProgress = if (maxStars <= 0) 0f else totalStars.toFloat() / maxStars.toFloat()
@@ -2029,6 +2032,29 @@ fun CompactGameHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+
+                    // ✅ Back button (only if provided)
+                    if (onBackClick != null) {
+                        IconButton(
+                            onClick = {
+                                SoundManager.playClick()
+                                onBackClick()
+                            },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.14f))
+                                .border(1.5.dp, borderColor.copy(alpha = 0.55f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .size(60.dp)
