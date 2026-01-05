@@ -297,10 +297,19 @@ private fun GameCard(
 // ============ GAME 1: GUESS THE NOTE ============
 @Composable
 private fun GuessTheNoteGame(onBack: () -> Unit) {
+    val context = LocalContext.current
     var currentNote by remember { mutableStateOf(musicNotes.random()) }
     var score by remember { mutableStateOf(0) }
     var showFeedback by remember { mutableStateOf<Boolean?>(null) }
     var streak by remember { mutableStateOf(0) }
+
+    fun playNoteSound(note: MusicNote) {
+        try {
+            val player = MediaPlayer.create(context, note.soundRes)
+            player?.setOnCompletionListener { it.release() }
+            player?.start()
+        } catch (_: Exception) { }
+    }
 
     LaunchedEffect(showFeedback) {
         if (showFeedback != null) {
@@ -350,6 +359,7 @@ private fun GuessTheNoteGame(onBack: () -> Unit) {
                     note = note,
                     enabled = showFeedback == null,
                     onClick = {
+                        playNoteSound(note)
                         SoundManager.playClick()
                         if (note.name == currentNote.name) {
                             showFeedback = true

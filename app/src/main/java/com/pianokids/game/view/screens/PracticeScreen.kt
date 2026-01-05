@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -25,6 +26,10 @@ import com.pianokids.game.R
 import com.pianokids.game.utils.PianoSoundManager
 import com.pianokids.game.utils.SoundManager
 import com.pianokids.game.view.components.PracticeFallingNotesView
+import com.pianokids.game.view.components.PianoKeyboard
+import com.pianokids.game.data.models.PianoConfig
+import com.pianokids.game.viewmodel.PianoViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.random.Random
 
 @Composable
@@ -32,6 +37,7 @@ fun PracticeScreen(
     onExit: () -> Unit
 ) {
     val context = LocalContext.current
+    val pianoViewModel: PianoViewModel = viewModel()
 
     // ✅ init audio once
     LaunchedEffect(Unit) {
@@ -40,6 +46,8 @@ fun PracticeScreen(
 
     // drives PracticeFallingNotesView
     var lastPlayedMidi by remember { mutableStateOf<Int?>(null) }
+    var pressedKeys by remember { mutableStateOf(setOf<String>()) }
+    var lastPlayedNote by remember { mutableStateOf("") }
 
     fun playAndSpawn(solfege: String, midi: Int) {
         PianoSoundManager.playNote(solfege)
@@ -177,69 +185,51 @@ fun PracticeScreen(
                 ) { Text("Clear") }
             }
 
-            Text(
-                text = "Test Notes",
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TestNoteButton("Do") { playAndSpawn("Do", 60) }
-                    TestNoteButton("Ré") { playAndSpawn("Ré", 62) }
-                    TestNoteButton("Mi") { playAndSpawn("Mi", 64) }
-                    TestNoteButton("Fa") { playAndSpawn("Fa", 65) }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TestNoteButton("Sol") { playAndSpawn("Sol", 67) }
-                    TestNoteButton("La") { playAndSpawn("La", 69) }
-                    TestNoteButton("Si") { playAndSpawn("Si", 71) }
-                    TestNoteButton("Do#") { playAndSpawn("Do#", 61) }
-                    TestNoteButton("Ré#") { playAndSpawn("Ré#", 63) }
-                }
-            }
-
-            // Placeholder keyboard
-            Box(
+            // Piano Keyboard
+            PianoKeyboard(
+                config = pianoViewModel.pianoState.collectAsState().value.config,
+                pressedKeys = pressedKeys,
+                onKeyPressed = { key ->
+                    pressedKeys = pressedKeys + key.note
+                    pianoViewModel.onKeyPressed(key)
+                    
+                    // Update MIDI and note for falling notes view
+                    if (key.solfege != lastPlayedNote) {
+                        lastPlayedNote = key.solfege
+                        // Convert solfege to MIDI (C4 = 60)
+                        val midiNote = when (key.solfege.lowercase()) {
+                            "do" -> 60
+                            "do#" -> 61
+                            "ré", "re" -> 62
+                            "ré#", "re#" -> 63
+                            "mi" -> 64
+                            "fa" -> 65
+                            "fa#" -> 66
+                            "sol" -> 67
+                            "sol#" -> 68
+                            "la" -> 69
+                            "la#" -> 70
+                            "si" -> 71
+                            else -> 60
+                        }
+                        playAndSpawn(key.solfege, midiNote)
+                    }
+                },
+                onKeyReleased = { key ->
+                    pressedKeys = pressedKeys - key.note
+                    pianoViewModel.onKeyReleased(key)
+                    lastPlayedNote = ""
+                },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(190.dp)
-                    .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(24.dp))
-                    .border(2.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(24.dp))
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "🎹 Full Keyboard Placeholder\n(teammate will plug full 88 keys here)",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+                    .shadow(12.dp, RoundedCornerShape(24.dp))
+                    .border(
+                        2.dp,
+                        Color(0xFF00D9FF).copy(alpha = 0.3f),
+                        RoundedCornerShape(24.dp)
+                    )
+            )
         }
-    }
-}
-
-@Composable
-private fun RowScope.TestNoteButton(
-    label: String,
-    onClick: () -> Unit
-) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.weight(1f),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-        contentPadding = PaddingValues(vertical = 10.dp)
-    ) {
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
